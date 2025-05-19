@@ -6,36 +6,27 @@ import { Button } from "@/components/ui/button"
 import PropertyList from "@/components/property-list"
 import AddPropertyForm from "@/components/add-property-form"
 import { Skeleton } from "@/components/ui/skeleton"
-import { createServerSupabaseClient } from "@/lib/supabase/server"
-import { redirect } from "next/navigation"
 
-export default async function HomePage() {
-  const supabase = createServerSupabaseClient()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session) {
-    redirect("/auth")
-  }
-
+export default function HomePage() {
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Property Manager</h1>
-          <p className="text-muted-foreground mt-1">Manage your properties, viewings, and notes in one place</p>
-        </div>
-        <div className="flex gap-2">
-          <Button asChild>
-            <Link href="/add-property">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Property
-            </Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/bookings">View All Bookings</Link>
-          </Button>
+      <div className="bg-[#FFD6BA] dark:bg-[#FFD6BA]/90 rounded-lg p-6 mb-8 shadow-md">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-[#555B6E]">Property Manager</h1>
+            <p className="text-[#555B6E]/80 mt-1">Manage your properties, viewings, and feedback in one place</p>
+          </div>
+          <div className="flex gap-2">
+            <Button asChild className="bg-[#555B6E] hover:bg-[#555B6E]/90 text-white">
+              <Link href="/add-property">
+                <Plus className="mr-2 h-4 w-4" />
+                Add Property
+              </Link>
+            </Button>
+            <Button variant="outline" asChild className="border-[#555B6E] text-[#555B6E] hover:bg-[#555B6E]/10">
+              <Link href="/bookings">View All Bookings</Link>
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -50,7 +41,7 @@ export default async function HomePage() {
           </Suspense>
         </section>
 
-        <section className="bg-muted p-6 rounded-lg">
+        <section className="bg-[#BEE3DB]/30 dark:bg-[#555B6E]/30 p-6 rounded-lg border border-[#BEE3DB] dark:border-[#89B0AE]">
           <h2 className="text-2xl font-semibold mb-4">Quick Add Property</h2>
           <AddPropertyForm />
         </section>

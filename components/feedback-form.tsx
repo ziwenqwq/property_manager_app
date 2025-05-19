@@ -14,9 +14,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useToast } from "@/hooks/use-toast"
-import { supabase } from "@/lib/supabase/client"
-import { uploadFeedbackMedia } from "@/lib/supabase/data"
+import { addFeedback } from "@/lib/data"
 
 const formSchema = z.object({
   text: z.string().min(1, "Feedback text is required"),
@@ -29,7 +27,6 @@ type FormValues = z.infer<typeof formSchema>
 
 export default function FeedbackForm({ propertyId }: { propertyId: string }) {
   const router = useRouter()
-  const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [imageFiles, setImageFiles] = useState<File[]>([])
   const [videoFile, setVideoFile] = useState<File | null>(null)
@@ -49,71 +46,32 @@ export default function FeedbackForm({ propertyId }: { propertyId: string }) {
     },
   })
 
-  async function onSubmit(values: FormValues) {
+  function onSubmit(values: FormValues) {
     setIsSubmitting(true)
 
-    try {
-      // Get the current user
-      const { data: userData } = await supabase.auth.getUser()
-      if (!userData.user) {
-        throw new Error("You must be logged in to add feedback")
-      }
+    // In a real app, you would upload files here
+    // For this demo, we'll just simulate the process
 
-      // 1. Add the feedback to the database
-      const { data: newFeedback, error } = await supabase
-        .from("feedback")
-        .insert({
-          property_id: propertyId,
-          user_id: userData.user.id,
-          text: values.text,
-        })
-        .select()
-        .single()
-
-      if (error) throw error
-
-      // 2. Upload images if any
-      const imagePromises = imageFiles.map((file) => uploadFeedbackMedia(newFeedback.id, file, "image"))
-
-      // 3. Upload video if any
-      const videoPromises = videoFile ? [uploadFeedbackMedia(newFeedback.id, videoFile, "video")] : []
-
-      // 4. Upload audio if any
-      let audioPromises: Promise<any>[] = []
-      if (audioFile) {
-        audioPromises = [uploadFeedbackMedia(newFeedback.id, audioFile, "audio")]
-      } else if (audioURL) {
-        // Convert the audio URL to a File object
-        const response = await fetch(audioURL)
-        const blob = await response.blob()
-        const file = new File([blob], "recording.wav", { type: "audio/wav" })
-        audioPromises = [uploadFeedbackMedia(newFeedback.id, file, "audio")]
-      }
-
-      // Wait for all uploads to complete
-      await Promise.all([...imagePromises, ...videoPromises, ...audioPromises])
-
-      toast({
-        title: "Success",
-        description: "Notes added successfully",
+    setTimeout(() => {
+      addFeedback({
+        ...values,
+        propertyId,
+        images: imageFiles.length > 0 ? imageFiles.map((f) => URL.createObjectURL(f)) : undefined,
+        video: videoFile ? URL.createObjectURL(videoFile) : undefined,
+        audio: audioFile ? URL.createObjectURL(audioFile) : audioURL,
       })
 
+      setIsSubmitting(false)
       form.reset()
       setImageFiles([])
       setVideoFile(null)
       setAudioFile(null)
       setAudioURL(null)
       router.refresh()
-    } catch (error: any) {
-      console.error("Error adding feedback:", error)
-      toast({
-        title: "Error",
-        description: error.message || "Failed to add notes",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSubmitting(false)
-    }
+
+      // Force a refresh of the page to show the new feedback immediately
+      window.location.reload()
+    }, 1000)
   }
 
   function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -165,11 +123,6 @@ export default function FeedbackForm({ propertyId }: { propertyId: string }) {
       setIsRecording(true)
     } catch (error) {
       console.error("Error accessing microphone:", error)
-      toast({
-        title: "Error",
-        description: "Failed to access microphone",
-        variant: "destructive",
-      })
     }
   }
 
@@ -189,7 +142,7 @@ export default function FeedbackForm({ propertyId }: { propertyId: string }) {
           name="text"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Your Notes</FormLabel>
+              <FormLabel>Your Feedback</FormLabel>
               <FormControl>
                 <Textarea
                   placeholder="Share your thoughts about this property..."
@@ -240,9 +193,10 @@ export default function FeedbackForm({ propertyId }: { propertyId: string }) {
                             multiple
                             className="hidden"
                             onChange={(e) => {
-                              handleImageChange(e)
                               if (e.target.files) {
-                                onChange(e.target.files)
+                                const newFiles = Array.from(e.target.files)
+                                setImageFiles((prev) => [...prev, ...newFiles])
+                                onChange(newFiles)
                               }
                             }}
                             {...field}
@@ -287,15 +241,7 @@ export default function FeedbackForm({ propertyId }: { propertyId: string }) {
                       {videoFile ? (
                         <div className="flex items-center p-2 border rounded-md">
                           <span className="flex-1 truncate">{videoFile.name}</span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              setVideoFile(null)
-                              onChange(null)
-                            }}
-                          >
+                          <Button type="button" variant="ghost" size="icon" onClick={() => setVideoFile(null)}>
                             <X className="h-4 w-4" />
                           </Button>
                         </div>
@@ -311,8 +257,8 @@ export default function FeedbackForm({ propertyId }: { propertyId: string }) {
                               accept="video/*"
                               className="hidden"
                               onChange={(e) => {
-                                handleVideoChange(e)
                                 if (e.target.files && e.target.files[0]) {
+                                  setVideoFile(e.target.files[0])
                                   onChange(e.target.files[0])
                                 }
                               }}
@@ -398,8 +344,8 @@ export default function FeedbackForm({ propertyId }: { propertyId: string }) {
                               accept="audio/*"
                               className="hidden"
                               onChange={(e) => {
-                                handleAudioChange(e)
                                 if (e.target.files && e.target.files[0]) {
+                                  setAudioFile(e.target.files[0])
                                   onChange(e.target.files[0])
                                 }
                               }}
@@ -419,7 +365,7 @@ export default function FeedbackForm({ propertyId }: { propertyId: string }) {
 
         <Button type="submit" className="w-full" disabled={isSubmitting}>
           {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {isSubmitting ? "Submitting..." : "Submit Notes"}
+          {isSubmitting ? "Submitting..." : "Submit Feedback"}
         </Button>
       </form>
     </Form>

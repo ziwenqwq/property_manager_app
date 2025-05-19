@@ -4,7 +4,7 @@ import type { Property, Booking, Feedback } from "./types"
 // Mock data storage with initial data
 const properties: Property[] = [
   {
-    id: "50a0b942-b64f-42fb-97d5-58ffba6d4a24", // Using the ID from your URL
+    id: "50a0b942-b64f-42fb-97d5-58ffba6d4a24",
     name: "Luxury Waterfront Villa",
     address: "123 Oceanview Drive, Malibu, CA 90210",
     listingAgent: "Jane Smith",
@@ -12,6 +12,19 @@ const properties: Property[] = [
     squareFootage: 3200,
     bedrooms: 4,
     listingUrl: "https://example.com/luxury-villa",
+    rating: 9,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: "724ad86b-7db4-4b6e-8d0a-5db651d4ffd5",
+    name: "Modern Mountain Retreat",
+    address: "789 Alpine Way, Aspen, CO 81611",
+    listingAgent: "David Wilson",
+    listingPrice: 3750000,
+    squareFootage: 4100,
+    bedrooms: 5,
+    rating: 8,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -23,6 +36,7 @@ const properties: Property[] = [
     listingPrice: 1250000,
     squareFootage: 1800,
     bedrooms: 2,
+    rating: 7,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -34,6 +48,7 @@ const properties: Property[] = [
     listingPrice: 850000,
     squareFootage: 2500,
     bedrooms: 3,
+    rating: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -46,8 +61,11 @@ const bookings: Booking[] = [
     propertyName: "Luxury Waterfront Villa",
     date: new Date(Date.now() + 86400000 * 2).toISOString(), // 2 days from now
     time: "14:00",
-    estateAgent: "Jane Smith",
-    notes: "Remember to ask about the pool maintenance and HOA fees",
+    name: "Alex Thompson",
+    email: "alex@example.com",
+    phone: "555-123-4567",
+    status: "scheduled", // Changed from "confirmed" to "scheduled"
+    notes: "Interested in seeing the pool area and backyard",
     createdAt: new Date().toISOString(),
   },
 ]
@@ -84,7 +102,7 @@ export function addProperty(data: Omit<Property, "id" | "createdAt" | "updatedAt
   return newProperty
 }
 
-export function updateProperty(id: string, data: Omit<Property, "id" | "createdAt" | "updatedAt">): Property {
+export function updateProperty(id: string, data: Partial<Omit<Property, "id" | "createdAt" | "updatedAt">>): Property {
   const index = properties.findIndex((p) => p.id === id)
 
   if (index === -1) {
@@ -93,9 +111,9 @@ export function updateProperty(id: string, data: Omit<Property, "id" | "createdA
 
   const now = new Date().toISOString()
   const updatedProperty: Property = {
-    id,
+    ...properties[index],
     ...data,
-    createdAt: properties[index].createdAt,
+    id,
     updatedAt: now,
   }
 
@@ -115,6 +133,11 @@ export function updateProperty(id: string, data: Omit<Property, "id" | "createdA
   })
 
   return updatedProperty
+}
+
+// Rating functions
+export function updatePropertyRating(id: string, rating: number | null): Property {
+  return updateProperty(id, { rating })
 }
 
 // Booking functions
@@ -144,11 +167,23 @@ export function addBooking(data: Omit<Booking, "id" | "propertyName" | "createdA
   return newBooking
 }
 
-export function removeBooking(id: string): void {
+export function updateBooking(
+  id: string,
+  data: Partial<Omit<Booking, "id" | "propertyId" | "propertyName" | "createdAt">>,
+): Booking {
   const index = bookings.findIndex((b) => b.id === id)
-  if (index !== -1) {
-    bookings.splice(index, 1)
+
+  if (index === -1) {
+    throw new Error("Booking not found")
   }
+
+  const updatedBooking = {
+    ...bookings[index],
+    ...data,
+  }
+
+  bookings[index] = updatedBooking
+  return updatedBooking
 }
 
 // Feedback functions
@@ -178,9 +213,21 @@ export function addFeedback(data: Omit<Feedback, "id" | "propertyName" | "create
   return newFeedback
 }
 
-export function removeFeedback(id: string): void {
+export function updateFeedback(
+  id: string,
+  data: Partial<Omit<Feedback, "id" | "propertyId" | "propertyName" | "createdAt">>,
+): Feedback {
   const index = feedback.findIndex((f) => f.id === id)
-  if (index !== -1) {
-    feedback.splice(index, 1)
+
+  if (index === -1) {
+    throw new Error("Feedback not found")
   }
+
+  const updatedFeedback = {
+    ...feedback[index],
+    ...data,
+  }
+
+  feedback[index] = updatedFeedback
+  return updatedFeedback
 }

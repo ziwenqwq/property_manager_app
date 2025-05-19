@@ -3,71 +3,30 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { format } from "date-fns"
-import { Calendar, Clock, Home, User, Trash2, Loader2 } from "lucide-react"
+import { Calendar, Clock, Home, User, Edit } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { useToast } from "@/hooks/use-toast"
-import { getAllBookings, deleteBooking, type Booking } from "@/lib/supabase/data"
+import { Badge } from "@/components/ui/badge"
+import { cn } from "@/lib/utils"
+import { getAllBookings } from "@/lib/data"
+import type { Booking } from "@/lib/types"
+import EditBookingDialog from "@/components/edit-booking-dialog"
 
 export default function AllBookings() {
   const [bookings, setBookings] = useState<Booking[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isDeleting, setIsDeleting] = useState<string | null>(null)
-  const { toast } = useToast()
+  const [editingBooking, setEditingBooking] = useState<Booking | null>(null)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
 
   useEffect(() => {
-    loadBookings()
+    setBookings(getAllBookings())
   }, [])
 
-  async function loadBookings() {
-    setIsLoading(true)
-    try {
-      const data = await getAllBookings()
-      setBookings(data)
-    } catch (error) {
-      console.error("Error loading bookings:", error)
-      toast({
-        title: "Error",
-        description: "Failed to load bookings",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  async function handleDeleteBooking(bookingId: string) {
-    setIsDeleting(bookingId)
-    try {
-      const success = await deleteBooking(bookingId)
-      if (success) {
-        toast({
-          title: "Success",
-          description: "Booking deleted successfully",
-        })
-        setBookings((prev) => prev.filter((booking) => booking.id !== bookingId))
-      } else {
-        throw new Error("Failed to delete booking")
-      }
-    } catch (error) {
-      console.error("Error deleting booking:", error)
-      toast({
-        title: "Error",
-        description: "Failed to delete booking",
-        variant: "destructive",
-      })
-    } finally {
-      setIsDeleting(null)
-    }
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-8">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    )
+  const handleEditComplete = () => {
+    setIsEditDialogOpen(false)
+    setEditingBooking(null)
+    // Refresh the bookings list
+    setBookings(getAllBookings())
   }
 
   if (bookings.length === 0) {
@@ -92,11 +51,23 @@ export default function AllBookings() {
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <Home className="h-4 w-4 text-muted-foreground" />
-                  <Link href={`/properties/${booking.property_id}`} className="font-medium hover:underline">
+                  <Link href={`/properties/${booking.propertyId}`} className="font-medium hover:underline">
                     {booking.propertyName}
                   </Link>
+                  {booking.status && (
+                    <Badge
+                      className={cn(
+                        "ml-2",
+                        booking.status === "completed" && "bg-green-500",
+                        booking.status === "scheduled" && "bg-blue-500",
+                        booking.status === "cancelled" && "bg-red-500",
+                      )}
+                    >
+                      {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                    </Badge>
+                  )}
                 </div>
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm">
+                <div className="flex flex-row items-center gap-4 text-sm">
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <span>{format(new Date(booking.date), "MMMM d, yyyy")}</span>
@@ -108,33 +79,39 @@ export default function AllBookings() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
-                {booking.estate_agent && (
+              <div className="space-y-1">
+                {booking.name && booking.name !== "Unspecified" && (
                   <div className="flex items-center gap-2">
                     <User className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">Agent: {booking.estate_agent}</span>
+                    <span className="font-medium">Estate Agent: {booking.name}</span>
                   </div>
                 )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                  onClick={() => handleDeleteBooking(booking.id)}
-                  disabled={isDeleting === booking.id}
-                >
-                  {isDeleting === booking.id ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4" />
-                  )}
-                </Button>
               </div>
             </div>
 
             {booking.notes && <div className="mt-2 text-sm border-t pt-2">{booking.notes}</div>}
+            <div className="flex justify-end mt-2 pt-2 border-t">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setEditingBooking(booking)
+                  setIsEditDialogOpen(true)
+                }}
+              >
+                <Edit className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ))}
+      <EditBookingDialog
+        booking={editingBooking}
+        open={isEditDialogOpen}
+        onOpenChange={setIsEditDialogOpen}
+        onEditComplete={handleEditComplete}
+      />
     </div>
   )
 }

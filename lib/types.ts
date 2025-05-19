@@ -9,6 +9,7 @@ export interface Property {
   listingUrl?: string
   listingPdf?: string
   floorplans?: string[]
+  rating?: number | null
   createdAt: string
   updatedAt: string
 }
@@ -19,7 +20,10 @@ export interface Booking {
   propertyName: string
   date: string
   time: string
-  estateAgent?: string
+  name: string
+  email: string
+  phone?: string
+  status?: string
   notes?: string
   createdAt: string
 }

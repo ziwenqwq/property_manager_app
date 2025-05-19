@@ -1,22 +1,10 @@
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
-import { redirect } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import AddPropertyForm from "@/components/add-property-form"
-import { createServerSupabaseClient } from "@/lib/supabase/server"
 
-export default async function AddPropertyPage() {
-  // Server-side authentication check
-  const supabase = createServerSupabaseClient()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session) {
-    redirect("/auth")
-  }
-
+export default function AddPropertyPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <Button variant="ghost" asChild className="mb-6">

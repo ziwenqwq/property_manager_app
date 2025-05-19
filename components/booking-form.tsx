@@ -15,11 +15,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
-import { useToast } from "@/hooks/use-toast"
-import { supabase } from "@/lib/supabase/client"
+import { addBooking } from "@/lib/data"
 
 const formSchema = z.object({
-  estate_agent: z.string().optional(),
+  estateAgent: z.string().optional(),
   date: z.date({
     required_error: "Please select a date",
   }),
@@ -31,57 +30,36 @@ type FormValues = z.infer<typeof formSchema>
 
 export default function BookingForm({ propertyId }: { propertyId: string }) {
   const router = useRouter()
-  const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      estate_agent: "",
+      estateAgent: "",
       time: "",
       notes: "",
     },
   })
 
-  async function onSubmit(values: FormValues) {
+  function onSubmit(values: FormValues) {
     setIsSubmitting(true)
 
-    try {
-      // Get the current user
-      const { data: userData } = await supabase.auth.getUser()
-      if (!userData.user) {
-        throw new Error("You must be logged in to book a viewing")
-      }
-
-      // Add the booking to the database
-      const { error } = await supabase.from("bookings").insert({
-        property_id: propertyId,
-        user_id: userData.user.id,
-        estate_agent: values.estate_agent,
-        date: values.date.toISOString().split("T")[0], // Format as YYYY-MM-DD
-        time: values.time,
-        notes: values.notes,
+    setTimeout(() => {
+      addBooking({
+        ...values,
+        propertyId,
+        name: values.estateAgent || "Unspecified",
+        email: "viewing@record.internal",
+        status: "scheduled",
       })
 
-      if (error) throw error
-
-      toast({
-        title: "Success",
-        description: "Viewing scheduled successfully",
-      })
-
+      setIsSubmitting(false)
       form.reset()
       router.refresh()
-    } catch (error: any) {
-      console.error("Error scheduling viewing:", error)
-      toast({
-        title: "Error",
-        description: error.message || "Failed to schedule viewing",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSubmitting(false)
-    }
+
+      // Force a refresh of the page to show the new booking immediately
+      window.location.reload()
+    }, 1000)
   }
 
   return (
@@ -89,10 +67,10 @@ export default function BookingForm({ propertyId }: { propertyId: string }) {
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <FormField
           control={form.control}
-          name="estate_agent"
+          name="estateAgent"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Estate Agent Name (optional)</FormLabel>
+              <FormLabel>Estate Agent's Name (optional)</FormLabel>
               <FormControl>
                 <Input placeholder="Enter estate agent's name" {...field} />
               </FormControl>
@@ -156,7 +134,11 @@ export default function BookingForm({ propertyId }: { propertyId: string }) {
             <FormItem>
               <FormLabel>Notes (optional)</FormLabel>
               <FormControl>
-                <Textarea placeholder="Any notes about this viewing" className="resize-none" {...field} />
+                <Textarea
+                  placeholder="Any special arrangements or details about the viewing"
+                  className="resize-none"
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -165,7 +147,7 @@ export default function BookingForm({ propertyId }: { propertyId: string }) {
 
         <Button type="submit" className="w-full" disabled={isSubmitting}>
           {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {isSubmitting ? "Saving..." : "Save Viewing"}
+          {isSubmitting ? "Saving..." : "Save Viewing Information"}
         </Button>
       </form>
     </Form>

@@ -1,79 +1,33 @@
 "use client"
 
+import { cn } from "@/lib/utils"
+
 import { useEffect, useState } from "react"
 import { format } from "date-fns"
-import { Calendar, Clock, User, Trash2, Loader2 } from "lucide-react"
+import { Calendar, Clock, User, Edit } from "lucide-react" // Added Edit import
+import EditBookingDialog from "@/components/edit-booking-dialog" // Added EditBookingDialog import
 
 import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { getBookingsByPropertyId } from "@/lib/data"
+import type { Booking } from "@/lib/types"
 import { Button } from "@/components/ui/button"
-import { useToast } from "@/hooks/use-toast"
-import { supabase } from "@/lib/supabase/client"
-import type { Booking } from "@/lib/supabase/data"
 
 export default function PropertyBookings({ propertyId }: { propertyId: string }) {
   const [bookings, setBookings] = useState<Booking[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isDeleting, setIsDeleting] = useState<string | null>(null)
-  const { toast } = useToast()
+  const [editingBooking, setEditingBooking] = useState<Booking | null>(null) // Added state variable
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false) // Added state variable
 
   useEffect(() => {
-    loadBookings()
+    setBookings(getBookingsByPropertyId(propertyId))
   }, [propertyId])
 
-  async function loadBookings() {
-    setIsLoading(true)
-    try {
-      const { data, error } = await supabase
-        .from("bookings")
-        .select("*")
-        .eq("property_id", propertyId)
-        .order("date", { ascending: true })
-
-      if (error) throw error
-      setBookings(data || [])
-    } catch (error) {
-      console.error("Error loading bookings:", error)
-      toast({
-        title: "Error",
-        description: "Failed to load bookings",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  async function handleDeleteBooking(bookingId: string) {
-    setIsDeleting(bookingId)
-    try {
-      const { error } = await supabase.from("bookings").delete().eq("id", bookingId)
-
-      if (error) throw error
-
-      toast({
-        title: "Success",
-        description: "Booking deleted successfully",
-      })
-
-      setBookings((prev) => prev.filter((booking) => booking.id !== bookingId))
-    } catch (error) {
-      console.error("Error deleting booking:", error)
-      toast({
-        title: "Error",
-        description: "Failed to delete booking",
-        variant: "destructive",
-      })
-    } finally {
-      setIsDeleting(null)
-    }
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-8">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    )
+  const handleEditComplete = () => {
+    // Added function
+    setIsEditDialogOpen(false)
+    setEditingBooking(null)
+    // Refresh the bookings list
+    setBookings(getBookingsByPropertyId(propertyId))
   }
 
   if (bookings.length === 0) {
@@ -81,54 +35,73 @@ export default function PropertyBookings({ propertyId }: { propertyId: string })
       <div className="text-center py-8 border rounded-lg">
         <Calendar className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
         <h3 className="text-lg font-medium mb-2">No viewings scheduled</h3>
-        <p className="text-muted-foreground">Schedule a viewing to keep track of your appointments</p>
+        <p className="text-muted-foreground">Use the form to schedule a viewing for this property</p>
       </div>
     )
   }
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-medium">Your Scheduled Viewings</h3>
+      <h3 className="text-lg font-medium">Scheduled Viewings</h3>
       <div className="grid gap-4">
         {bookings.map((booking) => (
           <Card key={booking.id}>
             <CardContent className="p-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span>{format(new Date(booking.date), "MMMM d, yyyy")}</span>
+                <div className="flex flex-row items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span>{format(new Date(booking.date), "MMMM d, yyyy")}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <span>{booking.time}</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span>{booking.time}</span>
-                </div>
+                {booking.status && (
+                  <Badge
+                    className={cn(
+                      booking.status === "completed" && "bg-green-500",
+                      booking.status === "scheduled" && "bg-blue-500",
+                      booking.status === "cancelled" && "bg-red-500",
+                    )}
+                  >
+                    {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                  </Badge>
+                )}
+              </div>
+              <div className="space-y-2 border-t pt-3">
+                {booking.name && booking.name !== "Unspecified" && (
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Estate Agent: {booking.name}</span>
+                  </div>
+                )}
+              </div>
+              {booking.notes && <div className="mt-3 text-sm border-t pt-3">{booking.notes}</div>}
+              <div className="flex justify-end mt-2 pt-2 border-t">
                 <Button
                   variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                  onClick={() => handleDeleteBooking(booking.id)}
-                  disabled={isDeleting === booking.id}
+                  size="sm"
+                  onClick={() => {
+                    setEditingBooking(booking)
+                    setIsEditDialogOpen(true)
+                  }}
                 >
-                  {isDeleting === booking.id ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4" />
-                  )}
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit
                 </Button>
               </div>
-
-              {booking.estate_agent && (
-                <div className="flex items-center gap-2 mt-2">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Agent: {booking.estate_agent}</span>
-                </div>
-              )}
-
-              {booking.notes && <div className="mt-3 text-sm border-t pt-3">{booking.notes}</div>}
             </CardContent>
           </Card>
         ))}
       </div>
+      <EditBookingDialog
+        booking={editingBooking}
+        open={isEditDialogOpen}
+        onOpenChange={setIsEditDialogOpen}
+        onEditComplete={handleEditComplete}
+      />
     </div>
   )
 }

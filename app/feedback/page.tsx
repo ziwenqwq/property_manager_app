@@ -1,22 +1,10 @@
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
-import { redirect } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import AllFeedback from "@/components/all-feedback"
-import { createServerSupabaseClient } from "@/lib/supabase/server"
 
-export default async function FeedbackPage() {
-  // Server-side authentication check
-  const supabase = createServerSupabaseClient()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session) {
-    redirect("/auth")
-  }
-
+export default function FeedbackPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <Button variant="ghost" asChild className="mb-6">
@@ -26,7 +14,7 @@ export default async function FeedbackPage() {
         </Link>
       </Button>
 
-      <h1 className="text-3xl font-bold mb-6">All Property Notes</h1>
+      <h1 className="text-3xl font-bold mb-6">All Property Feedback</h1>
       <AllFeedback />
     </div>
   )

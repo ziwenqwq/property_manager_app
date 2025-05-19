@@ -18,19 +18,18 @@ import {
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { useToast } from "@/hooks/use-toast"
-import { updateProperty } from "@/lib/supabase/data"
-import type { Property } from "@/lib/supabase/data"
+import { updateProperty } from "@/lib/data"
+import type { Property } from "@/lib/types"
 
 const formSchema = z.object({
   name: z.string().min(1, "Property name is required"),
   address: z.string().optional(),
-  listing_agent: z.string().optional(),
-  listing_price: z
+  listingAgent: z.string().optional(),
+  listingPrice: z
     .string()
     .optional()
     .transform((val) => (val ? Number(val) : undefined)),
-  square_footage: z
+  squareFootage: z
     .string()
     .optional()
     .transform((val) => (val ? Number(val) : undefined)),
@@ -38,7 +37,7 @@ const formSchema = z.object({
     .string()
     .optional()
     .transform((val) => (val ? Number(val) : undefined)),
-  listing_url: z.string().url().optional().or(z.literal("")),
+  listingUrl: z.string().url().optional().or(z.literal("")),
 })
 
 type FormValues = z.infer<typeof formSchema>
@@ -52,18 +51,17 @@ interface EditPropertyDialogProps {
 
 export default function EditPropertyDialog({ property, open, onOpenChange, onEditComplete }: EditPropertyDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const { toast } = useToast()
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
       address: "",
-      listing_agent: "",
-      listing_price: "",
-      square_footage: "",
+      listingAgent: "",
+      listingPrice: "",
+      squareFootage: "",
       bedrooms: "",
-      listing_url: "",
+      listingUrl: "",
     },
   })
 
@@ -71,45 +69,34 @@ export default function EditPropertyDialog({ property, open, onOpenChange, onEdi
   useEffect(() => {
     if (property && open) {
       form.reset({
-        name: property.name || "",
+        name: property.name,
         address: property.address || "",
-        listing_agent: property.listing_agent || "",
-        listing_price: property.listing_price ? property.listing_price.toString() : "",
-        square_footage: property.square_footage ? property.square_footage.toString() : "",
-        bedrooms: property.bedrooms ? property.bedrooms.toString() : "",
-        listing_url: property.listing_url || "",
+        listingAgent: property.listingAgent || "",
+        listingPrice: property.listingPrice?.toString() || "",
+        squareFootage: property.squareFootage?.toString() || "",
+        bedrooms: property.bedrooms?.toString() || "",
+        listingUrl: property.listingUrl || "",
       })
     }
   }, [property, open, form])
 
-  async function onSubmit(values: FormValues) {
+  function onSubmit(values: FormValues) {
     if (!property) return
 
     setIsSubmitting(true)
 
-    try {
-      const updatedProperty = await updateProperty(property.id, values)
-
-      if (!updatedProperty) {
-        throw new Error("Failed to update property")
-      }
-
-      toast({
-        title: "Success",
-        description: "Property updated successfully",
+    setTimeout(() => {
+      updateProperty(property.id, {
+        ...values,
+        // Preserve fields that aren't in the form
+        listingPdf: property.listingPdf,
+        floorplans: property.floorplans,
+        rating: property.rating,
       })
 
-      onEditComplete()
-    } catch (error) {
-      console.error("Error updating property:", error)
-      toast({
-        title: "Error",
-        description: "Failed to update property",
-        variant: "destructive",
-      })
-    } finally {
       setIsSubmitting(false)
-    }
+      onEditComplete()
+    }, 500)
   }
 
   return (
@@ -144,7 +131,7 @@ export default function EditPropertyDialog({ property, open, onOpenChange, onEdi
                   <FormItem>
                     <FormLabel>Address</FormLabel>
                     <FormControl>
-                      <Textarea placeholder="Enter property address" {...field} value={field.value || ""} />
+                      <Textarea placeholder="Enter property address" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -154,12 +141,12 @@ export default function EditPropertyDialog({ property, open, onOpenChange, onEdi
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField
                   control={form.control}
-                  name="listing_agent"
+                  name="listingAgent"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Listing Agent</FormLabel>
                       <FormControl>
-                        <Input placeholder="Agent name" {...field} value={field.value || ""} />
+                        <Input placeholder="Agent name" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -168,10 +155,10 @@ export default function EditPropertyDialog({ property, open, onOpenChange, onEdi
 
                 <FormField
                   control={form.control}
-                  name="listing_price"
+                  name="listingPrice"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Listing Price ($)</FormLabel>
+                      <FormLabel>Listing Price (£)</FormLabel>
                       <FormControl>
                         <Input type="number" placeholder="Price" {...field} value={field.value || ""} />
                       </FormControl>
@@ -182,7 +169,7 @@ export default function EditPropertyDialog({ property, open, onOpenChange, onEdi
 
                 <FormField
                   control={form.control}
-                  name="square_footage"
+                  name="squareFootage"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Square Footage</FormLabel>
@@ -211,12 +198,12 @@ export default function EditPropertyDialog({ property, open, onOpenChange, onEdi
 
               <FormField
                 control={form.control}
-                name="listing_url"
+                name="listingUrl"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Listing URL</FormLabel>
                     <FormControl>
-                      <Input placeholder="https://..." {...field} value={field.value || ""} />
+                      <Input placeholder="https://..." {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
