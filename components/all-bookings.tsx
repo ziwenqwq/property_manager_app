@@ -3,23 +3,71 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { format } from "date-fns"
-import { Calendar, Clock, Home, User, Trash2 } from "lucide-react"
+import { Calendar, Clock, Home, User, Trash2, Loader2 } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { getAllBookings, removeBooking } from "@/lib/data"
-import type { Booking } from "@/lib/types"
+import { useToast } from "@/hooks/use-toast"
+import { getAllBookings, deleteBooking, type Booking } from "@/lib/supabase/data"
 
 export default function AllBookings() {
   const [bookings, setBookings] = useState<Booking[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isDeleting, setIsDeleting] = useState<string | null>(null)
+  const { toast } = useToast()
 
   useEffect(() => {
-    setBookings(getAllBookings())
+    loadBookings()
   }, [])
 
-  const handleDeleteBooking = (bookingId: string) => {
-    removeBooking(bookingId)
-    setBookings(getAllBookings())
+  async function loadBookings() {
+    setIsLoading(true)
+    try {
+      const data = await getAllBookings()
+      setBookings(data)
+    } catch (error) {
+      console.error("Error loading bookings:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load bookings",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function handleDeleteBooking(bookingId: string) {
+    setIsDeleting(bookingId)
+    try {
+      const success = await deleteBooking(bookingId)
+      if (success) {
+        toast({
+          title: "Success",
+          description: "Booking deleted successfully",
+        })
+        setBookings((prev) => prev.filter((booking) => booking.id !== bookingId))
+      } else {
+        throw new Error("Failed to delete booking")
+      }
+    } catch (error) {
+      console.error("Error deleting booking:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete booking",
+        variant: "destructive",
+      })
+    } finally {
+      setIsDeleting(null)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
   }
 
   if (bookings.length === 0) {
@@ -44,7 +92,7 @@ export default function AllBookings() {
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <Home className="h-4 w-4 text-muted-foreground" />
-                  <Link href={`/properties/${booking.propertyId}`} className="font-medium hover:underline">
+                  <Link href={`/properties/${booking.property_id}`} className="font-medium hover:underline">
                     {booking.propertyName}
                   </Link>
                 </div>
@@ -61,10 +109,10 @@ export default function AllBookings() {
               </div>
 
               <div className="flex items-center gap-4">
-                {booking.estateAgent && (
+                {booking.estate_agent && (
                   <div className="flex items-center gap-2">
                     <User className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">Agent: {booking.estateAgent}</span>
+                    <span className="text-sm">Agent: {booking.estate_agent}</span>
                   </div>
                 )}
                 <Button
@@ -72,8 +120,13 @@ export default function AllBookings() {
                   size="icon"
                   className="h-8 w-8 text-muted-foreground hover:text-destructive"
                   onClick={() => handleDeleteBooking(booking.id)}
+                  disabled={isDeleting === booking.id}
                 >
-                  <Trash2 className="h-4 w-4" />
+                  {isDeleting === booking.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
                 </Button>
               </div>
             </div>

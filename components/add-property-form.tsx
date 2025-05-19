@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
@@ -11,17 +13,18 @@ import { Button } from "@/components/ui/button"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { addProperty } from "@/lib/data"
+import { useToast } from "@/hooks/use-toast"
+import { addProperty, uploadPropertyImage } from "@/lib/supabase/data"
 
 const formSchema = z.object({
   name: z.string().min(1, "Property name is required"),
   address: z.string().optional(),
-  listingAgent: z.string().optional(),
-  listingPrice: z
+  listing_agent: z.string().optional(),
+  listing_price: z
     .string()
     .optional()
     .transform((val) => (val ? Number(val) : undefined)),
-  squareFootage: z
+  square_footage: z
     .string()
     .optional()
     .transform((val) => (val ? Number(val) : undefined)),
@@ -29,51 +32,89 @@ const formSchema = z.object({
     .string()
     .optional()
     .transform((val) => (val ? Number(val) : undefined)),
-  listingUrl: z.string().url().optional().or(z.literal("")),
-  listingPdf: z.any().optional(),
-  floorplans: z.any().optional(),
+  listing_url: z.string().url().optional().or(z.literal("")),
 })
 
 type FormValues = z.infer<typeof formSchema>
 
 export default function AddPropertyForm() {
   const router = useRouter()
+  const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [pdfFile, setPdfFile] = useState<File | null>(null)
-  const [floorplanFiles, setFloorplanFiles] = useState<File[]>([])
+  const [propertyImages, setPropertyImages] = useState<File[]>([])
+  const [floorplanImages, setFloorplanImages] = useState<File[]>([])
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
       address: "",
-      listingAgent: "",
-      listingPrice: "",
-      squareFootage: "",
+      listing_agent: "",
+      listing_price: "",
+      square_footage: "",
       bedrooms: "",
-      listingUrl: "",
-      listingPdf: undefined,
-      floorplans: undefined,
+      listing_url: "",
     },
   })
 
-  function onSubmit(values: FormValues) {
+  async function onSubmit(values: FormValues) {
     setIsSubmitting(true)
 
-    // In a real app, you would upload files here
-    // For this demo, we'll just simulate the process
+    try {
+      // 1. Add the property to the database
+      const newProperty = await addProperty(values)
 
-    setTimeout(() => {
-      const newProperty = addProperty({
-        ...values,
-        listingPdf: pdfFile ? URL.createObjectURL(pdfFile) : undefined,
-        floorplans: floorplanFiles.length > 0 ? floorplanFiles.map((f) => URL.createObjectURL(f)) : undefined,
+      if (!newProperty) {
+        throw new Error("Failed to add property")
+      }
+
+      // 2. Upload property images if any
+      const propertyImagePromises = propertyImages.map((file) => uploadPropertyImage(newProperty.id, file, false))
+
+      // 3. Upload floorplan images if any
+      const floorplanImagePromises = floorplanImages.map((file) => uploadPropertyImage(newProperty.id, file, true))
+
+      // Wait for all uploads to complete
+      await Promise.all([...propertyImagePromises, ...floorplanImagePromises])
+
+      toast({
+        title: "Success",
+        description: "Property added successfully",
       })
 
-      setIsSubmitting(false)
+      // Navigate to the property detail page
       router.push(`/properties/${newProperty.id}`)
       router.refresh()
-    }, 1000)
+    } catch (error) {
+      console.error("Error adding property:", error)
+      toast({
+        title: "Error",
+        description: "Failed to add property",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  function handlePropertyImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (e.target.files) {
+      setPropertyImages((prev) => [...prev, ...Array.from(e.target.files || [])])
+    }
+  }
+
+  function handleFloorplanChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (e.target.files) {
+      setFloorplanImages((prev) => [...prev, ...Array.from(e.target.files || [])])
+    }
+  }
+
+  function removePropertyImage(index: number) {
+    setPropertyImages((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  function removeFloorplan(index: number) {
+    setFloorplanImages((prev) => prev.filter((_, i) => i !== index))
   }
 
   return (
@@ -110,7 +151,7 @@ export default function AddPropertyForm() {
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField
             control={form.control}
-            name="listingAgent"
+            name="listing_agent"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Listing Agent</FormLabel>
@@ -124,7 +165,7 @@ export default function AddPropertyForm() {
 
           <FormField
             control={form.control}
-            name="listingPrice"
+            name="listing_price"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Listing Price ($)</FormLabel>
@@ -138,7 +179,7 @@ export default function AddPropertyForm() {
 
           <FormField
             control={form.control}
-            name="squareFootage"
+            name="square_footage"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Square Footage</FormLabel>
@@ -167,7 +208,7 @@ export default function AddPropertyForm() {
 
         <FormField
           control={form.control}
-          name="listingUrl"
+          name="listing_url"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Listing URL</FormLabel>
@@ -181,118 +222,89 @@ export default function AddPropertyForm() {
         />
 
         <div className="space-y-4">
-          <FormField
-            control={form.control}
-            name="listingPdf"
-            render={({ field: { onChange, value, ...field } }) => (
-              <FormItem>
-                <FormLabel htmlFor="listingPdf">Listing PDF</FormLabel>
-                <FormControl>
-                  <div className="mt-1">
-                    {pdfFile ? (
-                      <div className="flex items-center p-2 border rounded-md">
-                        <span className="flex-1 truncate">{pdfFile.name}</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setPdfFile(null)
-                            onChange(null)
-                          }}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center border border-dashed rounded-md p-4">
-                        <label htmlFor="listingPdf" className="cursor-pointer text-center">
-                          <Upload className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
-                          <span className="text-sm font-medium">Upload PDF</span>
-                          <span className="text-xs text-muted-foreground block mt-1">Click to browse</span>
-                          <Input
-                            id="listingPdf"
-                            type="file"
-                            accept=".pdf"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0] || null
-                              setPdfFile(file)
-                              onChange(file || undefined)
-                            }}
-                            {...field}
-                          />
-                        </label>
-                      </div>
-                    )}
-                  </div>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <div>
+            <FormLabel htmlFor="propertyImages">Property Images</FormLabel>
+            <div className="mt-1">
+              <div className="flex items-center justify-center border border-dashed rounded-md p-4">
+                <label htmlFor="propertyImages" className="cursor-pointer text-center">
+                  <Upload className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
+                  <span className="text-sm font-medium">Upload Property Images</span>
+                  <span className="text-xs text-muted-foreground block mt-1">
+                    Click to browse (can select multiple)
+                  </span>
+                  <Input
+                    id="propertyImages"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={handlePropertyImageChange}
+                  />
+                </label>
+              </div>
 
-          <FormField
-            control={form.control}
-            name="floorplans"
-            render={({ field: { onChange, value, ...field } }) => (
-              <FormItem>
-                <FormLabel htmlFor="floorplans">Floor Plans</FormLabel>
-                <FormControl>
-                  <div className="mt-1">
-                    <div className="flex items-center justify-center border border-dashed rounded-md p-4">
-                      <label htmlFor="floorplans" className="cursor-pointer text-center">
-                        <Upload className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
-                        <span className="text-sm font-medium">Upload Floor Plans</span>
-                        <span className="text-xs text-muted-foreground block mt-1">
-                          Click to browse (can select multiple)
-                        </span>
-                        <Input
-                          id="floorplans"
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          className="hidden"
-                          onChange={(e) => {
-                            if (e.target.files?.length) {
-                              const newFiles = Array.from(e.target.files)
-                              setFloorplanFiles((prev) => [...prev, ...newFiles])
-                              onChange(newFiles.length > 0 ? newFiles : undefined)
-                            }
-                          }}
-                          {...field}
-                        />
-                      </label>
+              {propertyImages.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                  {propertyImages.map((file, index) => (
+                    <div key={index} className="relative border rounded-md p-2">
+                      <div className="text-xs truncate">{file.name}</div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute top-1 right-1 h-6 w-6"
+                        onClick={() => removePropertyImage(index)}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
                     </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
 
-                    {floorplanFiles.length > 0 && (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
-                        {floorplanFiles.map((file, index) => (
-                          <div key={index} className="relative border rounded-md p-2">
-                            <div className="text-xs truncate">{file.name}</div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="absolute top-1 right-1 h-6 w-6"
-                              onClick={() => {
-                                const updatedFiles = floorplanFiles.filter((_, i) => i !== index)
-                                setFloorplanFiles(updatedFiles)
-                                onChange(updatedFiles)
-                              }}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <div>
+            <FormLabel htmlFor="floorplans">Floor Plans</FormLabel>
+            <div className="mt-1">
+              <div className="flex items-center justify-center border border-dashed rounded-md p-4">
+                <label htmlFor="floorplans" className="cursor-pointer text-center">
+                  <Upload className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
+                  <span className="text-sm font-medium">Upload Floor Plans</span>
+                  <span className="text-xs text-muted-foreground block mt-1">
+                    Click to browse (can select multiple)
+                  </span>
+                  <Input
+                    id="floorplans"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={handleFloorplanChange}
+                  />
+                </label>
+              </div>
+
+              {floorplanImages.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                  {floorplanImages.map((file, index) => (
+                    <div key={index} className="relative border rounded-md p-2">
+                      <div className="text-xs truncate">{file.name}</div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute top-1 right-1 h-6 w-6"
+                        onClick={() => removeFloorplan(index)}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         <Button type="submit" className="w-full" disabled={isSubmitting}>

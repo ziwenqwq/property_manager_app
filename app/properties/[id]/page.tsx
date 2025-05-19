@@ -2,6 +2,7 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { ChevronLeft, Calendar, MessageSquare, User, DollarSign, SquareIcon as SquareFootIcon, Bed } from "lucide-react"
+import { redirect } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -10,15 +11,37 @@ import BookingForm from "@/components/booking-form"
 import FeedbackForm from "@/components/feedback-form"
 import PropertyBookings from "@/components/property-bookings"
 import PropertyFeedback from "@/components/property-feedback"
-import { getPropertyById } from "@/lib/data"
+import { createServerSupabaseClient } from "@/lib/supabase/server"
 
-export default function PropertyPage({ params }: { params: { id: string } }) {
-  const property = getPropertyById(params.id)
+export default async function PropertyPage({ params }: { params: { id: string } }) {
+  // Server-side authentication check
+  const supabase = createServerSupabaseClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
 
-  if (!property) {
-    console.error(`Property with ID ${params.id} not found`)
+  if (!session) {
+    redirect("/auth")
+  }
+
+  // Fetch property data from Supabase
+  const { data: property, error } = await supabase
+    .from("properties")
+    .select(`
+      *,
+      property_images(*)
+    `)
+    .eq("id", params.id)
+    .single()
+
+  if (error || !property) {
+    console.error(`Property with ID ${params.id} not found:`, error)
     notFound()
   }
+
+  // Get property images and floor plans
+  const images = property.property_images?.filter((img) => !img.is_floorplan) || []
+  const floorplans = property.property_images?.filter((img) => img.is_floorplan) || []
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -38,26 +61,35 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
             </CardHeader>
             <CardContent>
               <div className="aspect-video relative mb-4 bg-muted rounded-md overflow-hidden">
-                <Image src="/placeholder.svg?height=400&width=800" alt={property.name} fill className="object-cover" />
+                {images.length > 0 ? (
+                  <Image src={images[0].url || "/placeholder.svg"} alt={property.name} fill className="object-cover" />
+                ) : (
+                  <Image
+                    src="/placeholder.svg?height=400&width=800"
+                    alt={property.name}
+                    fill
+                    className="object-cover"
+                  />
+                )}
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-                {property.listingAgent && (
+                {property.listing_agent && (
                   <div className="flex items-center gap-2">
                     <User className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">{property.listingAgent}</span>
+                    <span className="text-sm">{property.listing_agent}</span>
                   </div>
                 )}
-                {property.listingPrice && (
+                {property.listing_price && (
                   <div className="flex items-center gap-2">
                     <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">${property.listingPrice.toLocaleString()}</span>
+                    <span className="text-sm">${Number(property.listing_price).toLocaleString()}</span>
                   </div>
                 )}
-                {property.squareFootage && (
+                {property.square_footage && (
                   <div className="flex items-center gap-2">
                     <SquareFootIcon className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">{property.squareFootage} sq ft</span>
+                    <span className="text-sm">{property.square_footage} sq ft</span>
                   </div>
                 )}
                 {property.bedrooms && (
@@ -68,22 +100,22 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
                 )}
               </div>
 
-              {property.listingUrl && (
+              {property.listing_url && (
                 <Button variant="outline" className="w-full sm:w-auto mb-4" asChild>
-                  <a href={property.listingUrl} target="_blank" rel="noopener noreferrer">
+                  <a href={property.listing_url} target="_blank" rel="noopener noreferrer">
                     View Listing
                   </a>
                 </Button>
               )}
 
-              {property.floorplans && property.floorplans.length > 0 && (
+              {floorplans.length > 0 && (
                 <div className="mt-6">
                   <h3 className="font-medium mb-2">Floor Plans</h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {property.floorplans.map((plan, index) => (
-                      <div key={index} className="aspect-square relative bg-muted rounded-md overflow-hidden">
+                    {floorplans.map((plan, index) => (
+                      <div key={plan.id} className="aspect-square relative bg-muted rounded-md overflow-hidden">
                         <Image
-                          src="/placeholder.svg?height=200&width=200"
+                          src={plan.url || "/placeholder.svg"}
                           alt={`Floor plan ${index + 1}`}
                           fill
                           className="object-cover"

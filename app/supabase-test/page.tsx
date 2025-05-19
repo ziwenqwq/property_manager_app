@@ -1,12 +1,12 @@
+import { redirect } from "next/navigation"
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
-import { redirect } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
-import AddPropertyForm from "@/components/add-property-form"
+import SupabaseTest from "@/components/supabase-test"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 
-export default async function AddPropertyPage() {
+export default async function SupabaseTestPage() {
   // Server-side authentication check
   const supabase = createServerSupabaseClient()
   const {
@@ -27,10 +27,8 @@ export default async function AddPropertyPage() {
       </Button>
 
       <div className="max-w-3xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">Add New Property</h1>
-        <div className="bg-card p-6 rounded-lg border">
-          <AddPropertyForm />
-        </div>
+        <h1 className="text-3xl font-bold mb-6">Supabase Test</h1>
+        <SupabaseTest />
       </div>
     </div>
   )

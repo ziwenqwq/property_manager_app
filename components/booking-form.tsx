@@ -15,10 +15,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
-import { addBooking } from "@/lib/data"
+import { useToast } from "@/hooks/use-toast"
+import { supabase } from "@/lib/supabase/client"
 
 const formSchema = z.object({
-  estateAgent: z.string().optional(),
+  estate_agent: z.string().optional(),
   date: z.date({
     required_error: "Please select a date",
   }),
@@ -30,30 +31,57 @@ type FormValues = z.infer<typeof formSchema>
 
 export default function BookingForm({ propertyId }: { propertyId: string }) {
   const router = useRouter()
+  const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      estateAgent: "",
+      estate_agent: "",
       time: "",
       notes: "",
     },
   })
 
-  function onSubmit(values: FormValues) {
+  async function onSubmit(values: FormValues) {
     setIsSubmitting(true)
 
-    setTimeout(() => {
-      addBooking({
-        ...values,
-        propertyId,
+    try {
+      // Get the current user
+      const { data: userData } = await supabase.auth.getUser()
+      if (!userData.user) {
+        throw new Error("You must be logged in to book a viewing")
+      }
+
+      // Add the booking to the database
+      const { error } = await supabase.from("bookings").insert({
+        property_id: propertyId,
+        user_id: userData.user.id,
+        estate_agent: values.estate_agent,
+        date: values.date.toISOString().split("T")[0], // Format as YYYY-MM-DD
+        time: values.time,
+        notes: values.notes,
       })
 
-      setIsSubmitting(false)
+      if (error) throw error
+
+      toast({
+        title: "Success",
+        description: "Viewing scheduled successfully",
+      })
+
       form.reset()
       router.refresh()
-    }, 1000)
+    } catch (error: any) {
+      console.error("Error scheduling viewing:", error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to schedule viewing",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -61,7 +89,7 @@ export default function BookingForm({ propertyId }: { propertyId: string }) {
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <FormField
           control={form.control}
-          name="estateAgent"
+          name="estate_agent"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Estate Agent Name (optional)</FormLabel>

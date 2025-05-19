@@ -1,11 +1,12 @@
 "use client"
 
 import Link from "next/link"
-import { Home, Calendar, MessageSquare, Menu, X } from "lucide-react"
 import { useState } from "react"
+import { Home, Calendar, MessageSquare, Menu, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { AuthButton } from "@/components/auth/auth-button"
 
 export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -27,15 +28,19 @@ export default function Navbar() {
               Viewings
             </Link>
             <Link href="/feedback" className="text-sm font-medium hover:text-primary">
-              Feedback
+              Notes
             </Link>
           </nav>
 
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <AuthButton />
+          </div>
         </div>
 
         <div className="md:hidden flex items-center gap-2">
           <ThemeToggle />
+          <AuthButton />
           <Button variant="ghost" size="icon" onClick={() => setIsMenuOpen(!isMenuOpen)}>
             {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
@@ -67,7 +72,7 @@ export default function Navbar() {
               onClick={() => setIsMenuOpen(false)}
             >
               <MessageSquare className="h-4 w-4" />
-              Feedback
+              Notes
             </Link>
           </nav>
         </div>

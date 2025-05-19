@@ -6,14 +6,25 @@ import { Button } from "@/components/ui/button"
 import PropertyList from "@/components/property-list"
 import AddPropertyForm from "@/components/add-property-form"
 import { Skeleton } from "@/components/ui/skeleton"
+import { createServerSupabaseClient } from "@/lib/supabase/server"
+import { redirect } from "next/navigation"
 
-export default function HomePage() {
+export default async function HomePage() {
+  const supabase = createServerSupabaseClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (!session) {
+    redirect("/auth")
+  }
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Property Manager</h1>
-          <p className="text-muted-foreground mt-1">Manage your properties, viewings, and feedback in one place</p>
+          <p className="text-muted-foreground mt-1">Manage your properties, viewings, and notes in one place</p>
         </div>
         <div className="flex gap-2">
           <Button asChild>
