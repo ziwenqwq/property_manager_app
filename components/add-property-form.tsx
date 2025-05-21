@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { Loader2, Upload, X } from "lucide-react"
+import { Loader2, Upload, X, ImageIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
@@ -32,6 +32,7 @@ const formSchema = z.object({
   listingUrl: z.string().url().optional().or(z.literal("")),
   listingPdf: z.any().optional(),
   floorplans: z.any().optional(),
+  photos: z.any().optional(),
 })
 
 type FormValues = z.infer<typeof formSchema>
@@ -41,6 +42,7 @@ export default function AddPropertyForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [floorplanFiles, setFloorplanFiles] = useState<File[]>([])
+  const [photoFiles, setPhotoFiles] = useState<File[]>([])
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -54,6 +56,7 @@ export default function AddPropertyForm() {
       listingUrl: "",
       listingPdf: undefined,
       floorplans: undefined,
+      photos: undefined,
     },
   })
 
@@ -68,6 +71,8 @@ export default function AddPropertyForm() {
         ...values,
         listingPdf: pdfFile ? URL.createObjectURL(pdfFile) : undefined,
         floorplans: floorplanFiles.length > 0 ? floorplanFiles.map((f) => URL.createObjectURL(f)) : undefined,
+        photos: photoFiles.length > 0 ? photoFiles.map((f) => URL.createObjectURL(f)) : undefined,
+        coverPhotoIndex: photoFiles.length > 0 ? 0 : undefined, // Set first photo as cover by default
       })
 
       setIsSubmitting(false)
@@ -183,6 +188,69 @@ export default function AddPropertyForm() {
         <div className="space-y-4">
           <FormField
             control={form.control}
+            name="photos"
+            render={({ field: { onChange, value, ...field } }) => (
+              <FormItem>
+                <FormLabel htmlFor="photos">Property Photos</FormLabel>
+                <FormControl>
+                  <div className="mt-1">
+                    <div className="flex items-center justify-center border border-dashed rounded-md p-4">
+                      <label htmlFor="photos" className="cursor-pointer text-center">
+                        <ImageIcon className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
+                        <span className="text-sm font-medium">Upload Property Photos</span>
+                        <span className="text-xs text-muted-foreground block mt-1">
+                          Click to browse (can select multiple)
+                        </span>
+                        <Input
+                          id="photos"
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={(e) => {
+                            if (e.target.files?.length) {
+                              const newFiles = Array.from(e.target.files)
+                              setPhotoFiles((prev) => [...prev, ...newFiles])
+                              onChange(newFiles.length > 0 ? newFiles : undefined)
+                            }
+                          }}
+                          {...field}
+                        />
+                      </label>
+                    </div>
+
+                    {photoFiles.length > 0 && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                        {photoFiles.map((file, index) => (
+                          <div key={index} className="relative border rounded-md p-2">
+                            <div className="text-xs truncate">{file.name}</div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="absolute top-1 right-1 h-6 w-6"
+                              onClick={() => {
+                                const updatedFiles = photoFiles.filter((_, i) => i !== index)
+                                setPhotoFiles(updatedFiles)
+                                onChange(updatedFiles.length > 0 ? updatedFiles : undefined)
+                              }}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </FormControl>
+                <FormDescription>First photo will be used as the cover image by default</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
             name="listingPdf"
             render={({ field: { onChange, value, ...field } }) => (
               <FormItem>
@@ -278,7 +346,7 @@ export default function AddPropertyForm() {
                               onClick={() => {
                                 const updatedFiles = floorplanFiles.filter((_, i) => i !== index)
                                 setFloorplanFiles(updatedFiles)
-                                onChange(updatedFiles)
+                                onChange(updatedFiles.length > 0 ? updatedFiles : undefined)
                               }}
                             >
                               <X className="h-3 w-3" />

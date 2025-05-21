@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
@@ -32,7 +34,9 @@ export default function PropertyList() {
     setProperties(getProperties())
   }, [])
 
-  const handleEditClick = (property: Property) => {
+  const handleEditClick = (property: Property, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
     setEditingProperty(property)
     setIsEditDialogOpen(true)
   }
@@ -62,75 +66,82 @@ export default function PropertyList() {
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {properties.map((property) => (
           <Card key={property.id} className="overflow-hidden transition-all duration-200 hover:shadow-md group">
-            <Link href={`/properties/${property.id}`} className="block">
-              <div className="aspect-video relative">
-                <Image src="/placeholder.svg?height=300&width=600" alt={property.name} fill className="object-cover" />
-                {property.listingPrice && (
-                  <Badge className="absolute top-2 right-2">£{property.listingPrice.toLocaleString()}</Badge>
-                )}
-                <div className="absolute top-2 left-2">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="bg-background/80 backdrop-blur-sm"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start">
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleEditClick(property)
-                        }}
-                      >
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit Property
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-                <div className="absolute bottom-2 left-2">
-                  <PropertyRating
-                    propertyId={property.id}
-                    rating={property.rating}
-                    size="sm"
-                    editable={false}
-                    className="bg-background/80 backdrop-blur-sm px-2 py-1 rounded-full"
-                  />
-                </div>
+            <div className="aspect-video relative">
+              <Link href={`/properties/${property.id}`} className="block absolute inset-0 z-10">
+                <span className="sr-only">View {property.name}</span>
+              </Link>
+              <Image
+                src={
+                  property.photos && property.photos.length > 0
+                    ? property.photos[property.coverPhotoIndex || 0]
+                    : "/placeholder.svg?height=300&width=600"
+                }
+                alt={property.name}
+                fill
+                className="object-cover"
+              />
+              {property.listingPrice && (
+                <Badge className="absolute top-2 right-2 z-20">£{property.listingPrice.toLocaleString()}</Badge>
+              )}
+              <div className="absolute top-2 left-2 z-20">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="bg-background/80 backdrop-blur-sm"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuItem onClick={(e) => handleEditClick(property, e)}>
+                      <Edit className="mr-2 h-4 w-4" />
+                      Edit Property
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-              <CardHeader>
+              <div className="absolute bottom-2 left-2 z-20">
+                <PropertyRating
+                  propertyId={property.id}
+                  rating={property.rating}
+                  size="sm"
+                  editable={false}
+                  className="bg-background/80 backdrop-blur-sm px-2 py-1 rounded-full"
+                />
+              </div>
+            </div>
+            <CardHeader>
+              <Link href={`/properties/${property.id}`} className="block">
                 <CardTitle className="line-clamp-1 group-hover:text-primary transition-colors">
                   {property.name}
                 </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-2 mb-4">
-                  {property.bedrooms && (
-                    <div className="flex items-center gap-2">
-                      <Bed className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">{property.bedrooms} beds</span>
-                    </div>
-                  )}
-                  {property.squareFootage && (
-                    <div className="flex items-center gap-2">
-                      <SquareFootIcon className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">{property.squareFootage} sq ft</span>
-                    </div>
-                  )}
-                  {property.listingAgent && (
-                    <div className="flex items-center gap-2 col-span-2">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm truncate">{property.listingAgent}</span>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Link>
+              </Link>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {property.bedrooms && (
+                  <div className="flex items-center gap-2">
+                    <Bed className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">{property.bedrooms} beds</span>
+                  </div>
+                )}
+                {property.squareFootage && (
+                  <div className="flex items-center gap-2">
+                    <SquareFootIcon className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">{property.squareFootage} sq ft</span>
+                  </div>
+                )}
+                {property.listingAgent && (
+                  <div className="flex items-center gap-2 col-span-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm truncate">{property.listingAgent}</span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
             <CardFooter className="flex justify-between">
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/properties/${property.id}`}>

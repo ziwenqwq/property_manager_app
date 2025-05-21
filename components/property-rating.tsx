@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import { Star } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -56,6 +58,14 @@ export default function PropertyRating({
     window.location.reload()
   }
 
+  const handleRatingClick = (e: React.MouseEvent) => {
+    if (editable) {
+      e.preventDefault()
+      e.stopPropagation()
+      setIsDialogOpen(true)
+    }
+  }
+
   return (
     <>
       <div
@@ -65,7 +75,7 @@ export default function PropertyRating({
           sizeClasses[size],
           className,
         )}
-        onClick={() => editable && setIsDialogOpen(true)}
+        onClick={handleRatingClick}
       >
         <div
           className={cn(

@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import Image from "next/image"
 import {
   ChevronLeft,
   Calendar,
@@ -13,6 +12,7 @@ import {
   SquareIcon as SquareFootIcon,
   Bed,
   Edit,
+  FileIcon,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -22,9 +22,11 @@ import BookingForm from "@/components/booking-form"
 import FeedbackForm from "@/components/feedback-form"
 import PropertyBookings from "@/components/property-bookings"
 import PropertyFeedback from "@/components/property-feedback"
+import PropertyFiles from "@/components/property-files"
 import PropertyRating from "@/components/property-rating"
 import { getPropertyById } from "@/lib/data"
 import EditPropertyDialog from "@/components/edit-property-dialog"
+import PropertyPhotoGallery from "@/components/property-photo-gallery"
 
 export default function PropertyPage({ params }: { params: { id: string } }) {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -68,9 +70,7 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="aspect-video relative mb-4 bg-muted rounded-md overflow-hidden">
-                <Image src="/placeholder.svg?height=400&width=800" alt={property.name} fill className="object-cover" />
-              </div>
+              <PropertyPhotoGallery photos={property.photos || []} coverPhotoIndex={property.coverPhotoIndex || 0} />
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
                 {property.listingAgent && (
@@ -106,29 +106,11 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
                   </a>
                 </Button>
               )}
-
-              {property.floorplans && property.floorplans.length > 0 && (
-                <div className="mt-6">
-                  <h3 className="font-medium mb-2">Floor Plans</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {property.floorplans.map((plan, index) => (
-                      <div key={index} className="aspect-square relative bg-muted rounded-md overflow-hidden">
-                        <Image
-                          src="/placeholder.svg?height=200&width=200"
-                          alt={`Floor plan ${index + 1}`}
-                          fill
-                          className="object-cover"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </CardContent>
           </Card>
 
           <Tabs defaultValue="bookings">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="bookings">
                 <Calendar className="mr-2 h-4 w-4" />
                 Viewings
@@ -137,12 +119,19 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
                 <MessageSquare className="mr-2 h-4 w-4" />
                 Feedback
               </TabsTrigger>
+              <TabsTrigger value="files">
+                <FileIcon className="mr-2 h-4 w-4" />
+                Files
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="bookings" className="space-y-4 pt-4">
               <PropertyBookings propertyId={params.id} />
             </TabsContent>
             <TabsContent value="feedback" className="space-y-4 pt-4">
               <PropertyFeedback propertyId={params.id} />
+            </TabsContent>
+            <TabsContent value="files" className="space-y-4 pt-4">
+              <PropertyFiles property={property} />
             </TabsContent>
           </Tabs>
         </div>

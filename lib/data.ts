@@ -12,7 +12,19 @@ const properties: Property[] = [
     squareFootage: 3200,
     bedrooms: 4,
     listingUrl: "https://example.com/luxury-villa",
+    listingPdf: "/property-listing-document.png",
     rating: 9,
+    photos: [
+      "/placeholder.svg?height=800&width=1200&query=luxury waterfront villa exterior",
+      "/placeholder.svg?height=800&width=1200&query=modern kitchen with ocean view",
+      "/placeholder.svg?height=800&width=1200&query=luxury master bedroom with balcony",
+      "/placeholder.svg?height=800&width=1200&query=swimming pool with ocean view",
+    ],
+    floorplans: [
+      "/placeholder.svg?height=800&width=800&query=floor plan first floor",
+      "/placeholder.svg?height=800&width=800&query=floor plan second floor",
+    ],
+    coverPhotoIndex: 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -24,6 +36,13 @@ const properties: Property[] = [
     listingPrice: 3750000,
     squareFootage: 4100,
     bedrooms: 5,
+    photos: [
+      "/placeholder.svg?height=800&width=1200&query=modern mountain cabin exterior",
+      "/placeholder.svg?height=800&width=1200&query=rustic living room with fireplace",
+      "/placeholder.svg?height=800&width=1200&query=mountain view from deck",
+    ],
+    floorplans: ["/placeholder.svg?height=800&width=800&query=mountain cabin floor plan"],
+    coverPhotoIndex: 0,
     rating: 8,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -36,6 +55,11 @@ const properties: Property[] = [
     listingPrice: 1250000,
     squareFootage: 1800,
     bedrooms: 2,
+    photos: [
+      "/placeholder.svg?height=800&width=1200&query=modern urban loft interior",
+      "/placeholder.svg?height=800&width=1200&query=city skyline view from apartment",
+    ],
+    coverPhotoIndex: 0,
     rating: 7,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -48,6 +72,11 @@ const properties: Property[] = [
     listingPrice: 850000,
     squareFootage: 2500,
     bedrooms: 3,
+    photos: [
+      "/placeholder.svg?height=800&width=1200&query=suburban family home exterior",
+      "/placeholder.svg?height=800&width=1200&query=backyard with patio and garden",
+    ],
+    coverPhotoIndex: 0,
     rating: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -76,7 +105,28 @@ const feedback: Feedback[] = [
     propertyId: "50a0b942-b64f-42fb-97d5-58ffba6d4a24",
     propertyName: "Luxury Waterfront Villa",
     text: "Absolutely stunning property with amazing ocean views. The master bedroom is spacious and the kitchen is well-equipped with high-end appliances.",
-    createdAt: new Date().toISOString(),
+    images: [
+      "/placeholder.svg?height=800&width=1200&query=ocean view from luxury villa balcony",
+      "/placeholder.svg?height=800&width=1200&query=luxury villa master bathroom",
+    ],
+    video: "/placeholder.svg?height=800&width=1200&query=video placeholder",
+    createdAt: new Date(Date.now() - 86400000 * 5).toISOString(), // 5 days ago
+  },
+  {
+    id: uuidv4(),
+    propertyId: "50a0b942-b64f-42fb-97d5-58ffba6d4a24",
+    propertyName: "Luxury Waterfront Villa",
+    text: "The location is perfect, just steps from the beach. However, some of the appliances could use an update. The outdoor space is phenomenal for entertaining.",
+    audio: "/placeholder.svg?height=50&width=320&query=audio waveform",
+    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(), // 2 days ago
+  },
+  {
+    id: uuidv4(),
+    propertyId: "724ad86b-7db4-4b6e-8d0a-5db651d4ffd5",
+    propertyName: "Modern Mountain Retreat",
+    text: "Perfect mountain getaway with breathtaking views. The interior is beautifully designed with high-end finishes. Highly recommend!",
+    images: ["/placeholder.svg?height=800&width=1200&query=mountain view from cabin window"],
+    createdAt: new Date(Date.now() - 86400000 * 3).toISOString(), // 3 days ago
   },
 ]
 
