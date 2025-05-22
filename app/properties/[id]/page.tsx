@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
-import { notFound } from "next/navigation"
+import { useState, useEffect } from "react"
+import { notFound, useRouter } from "next/navigation"
 import Link from "next/link"
+import Image from "next/image"
 import {
   ChevronLeft,
   Calendar,
@@ -13,6 +14,7 @@ import {
   Bed,
   Edit,
   FileIcon,
+  Trash2,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -26,20 +28,90 @@ import PropertyFiles from "@/components/property-files"
 import PropertyRating from "@/components/property-rating"
 import { getPropertyById } from "@/lib/data"
 import EditPropertyDialog from "@/components/edit-property-dialog"
-import PropertyPhotoGallery from "@/components/property-photo-gallery"
+import { deleteProperty } from "@/lib/actions"
+import ConfirmationDialog from "@/components/confirmation-dialog"
+import { toast } from "@/components/ui/use-toast"
 
+// Update the PropertyPage component to include delete functionality
 export default function PropertyPage({ params }: { params: { id: string } }) {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const property = getPropertyById(params.id)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [property, setProperty] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const router = useRouter()
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
+
+  useEffect(() => {
+    async function loadProperty() {
+      setIsLoading(true)
+      const propertyData = await getPropertyById(params.id)
+      setProperty(propertyData)
+      setIsLoading(false)
+    }
+
+    loadProperty()
+  }, [params.id, refreshTrigger])
+
+  const handleDelete = async () => {
+    try {
+      const result = await deleteProperty(params.id)
+
+      if (result.success) {
+        toast({
+          title: "Property deleted",
+          description: "The property has been deleted successfully.",
+        })
+        router.push("/")
+      } else {
+        toast({
+          title: "Error deleting property",
+          description: result.error || "An unexpected error occurred",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error deleting property:", error)
+      toast({
+        title: "Error deleting property",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      })
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#89B0AE]"></div>
+        </div>
+      </div>
+    )
+  }
 
   if (!property) {
     console.error(`Property with ID ${params.id} not found`)
     notFound()
   }
 
+  const refreshPage = () => {
+    setRefreshTrigger((prev) => prev + 1)
+    router.refresh()
+  }
+
   const handleEditComplete = () => {
     setIsEditDialogOpen(false)
-    window.location.reload()
+
+    // Force a reload of the property data
+    getPropertyById(params.id).then((updatedProperty) => {
+      if (updatedProperty) {
+        setProperty(updatedProperty)
+        console.log("Updated property data:", updatedProperty)
+      }
+    })
+
+    // Force a refresh of the page
+    router.refresh()
   }
 
   return (
@@ -51,10 +123,16 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
             Back to Properties
           </Link>
         </Button>
-        <Button onClick={() => setIsEditDialogOpen(true)} className="bg-[#89B0AE] hover:bg-[#89B0AE]/90 text-white">
-          <Edit className="mr-2 h-4 w-4" />
-          Edit Listing
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => setIsEditDialogOpen(true)} className="bg-[#89B0AE] hover:bg-[#89B0AE]/90 text-white">
+            <Edit className="mr-2 h-4 w-4" />
+            Edit Listing
+          </Button>
+          <Button variant="destructive" onClick={() => setIsDeleteDialogOpen(true)}>
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete Property
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -70,7 +148,23 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
               </div>
             </CardHeader>
             <CardContent>
-              <PropertyPhotoGallery photos={property.photos || []} coverPhotoIndex={property.coverPhotoIndex || 0} />
+              <div className="aspect-video relative mb-4 bg-muted rounded-md overflow-hidden">
+                {property.photos && property.photos.length > 0 ? (
+                  <Image
+                    src={property.photos[0] || "/placeholder.svg"}
+                    alt={property.name}
+                    fill
+                    className="object-cover"
+                  />
+                ) : (
+                  <Image
+                    src="/placeholder.svg?height=400&width=800"
+                    alt={property.name}
+                    fill
+                    className="object-cover"
+                  />
+                )}
+              </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
                 {property.listingAgent && (
@@ -106,6 +200,24 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
                   </a>
                 </Button>
               )}
+
+              {property.floorplans && property.floorplans.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="font-medium mb-2">Floor Plans</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {property.floorplans.map((plan: string, index: number) => (
+                      <div key={index} className="aspect-square relative bg-muted rounded-md overflow-hidden">
+                        <Image
+                          src={plan || "/placeholder.svg"}
+                          alt={`Floor plan ${index + 1}`}
+                          fill
+                          className="object-cover"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -131,7 +243,7 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
               <PropertyFeedback propertyId={params.id} />
             </TabsContent>
             <TabsContent value="files" className="space-y-4 pt-4">
-              <PropertyFiles property={property} />
+              <PropertyFiles propertyId={params.id} />
             </TabsContent>
           </Tabs>
         </div>
@@ -143,7 +255,16 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
               <CardDescription>Record details about property viewings</CardDescription>
             </CardHeader>
             <CardContent>
-              <BookingForm propertyId={params.id} />
+              <BookingForm
+                propertyId={params.id}
+                onSuccess={() => {
+                  refreshPage()
+                  // Force a hard refresh after a short delay
+                  setTimeout(() => {
+                    window.location.href = window.location.href
+                  }, 300)
+                }}
+              />
             </CardContent>
           </Card>
 
@@ -153,7 +274,16 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
               <CardDescription>Record feedback about this property</CardDescription>
             </CardHeader>
             <CardContent>
-              <FeedbackForm propertyId={params.id} />
+              <FeedbackForm
+                propertyId={params.id}
+                onSuccess={() => {
+                  refreshPage()
+                  // Force a hard refresh after a short delay
+                  setTimeout(() => {
+                    window.location.href = window.location.href
+                  }, 300)
+                }}
+              />
             </CardContent>
           </Card>
         </div>
@@ -164,6 +294,15 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
         open={isEditDialogOpen}
         onOpenChange={setIsEditDialogOpen}
         onEditComplete={handleEditComplete}
+      />
+
+      <ConfirmationDialog
+        title="Delete Property"
+        description="Are you sure you want to delete this property? This action cannot be undone and will remove all associated viewings and feedback."
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        onConfirm={handleDelete}
+        variant="destructive"
       />
     </div>
   )

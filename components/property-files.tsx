@@ -2,495 +2,330 @@
 
 import { useEffect, useState } from "react"
 import Image from "next/image"
-import { FileIcon, ImageIcon, FileText, Mic, ExternalLink, Download, X } from "lucide-react"
+import {
+  FileIcon,
+  ImageIcon,
+  FileText,
+  FileSpreadsheet,
+  Video,
+  Mic,
+  Download,
+  ExternalLink,
+  Trash2,
+} from "lucide-react"
+import { useRouter } from "next/navigation"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
-import { getFeedbackByPropertyId } from "@/lib/data"
-import type { Property, Feedback } from "@/lib/types"
+import { getPropertyFiles } from "@/lib/data"
+import { deleteFile, deletePropertyPhoto, deletePropertyFloorplan, deletePropertyListingPdf } from "@/lib/actions"
+import { toast } from "@/components/ui/use-toast"
+import ConfirmationDialog from "@/components/confirmation-dialog"
 
-interface PropertyFilesProps {
-  property: Property
+interface PropertyFile {
+  id: string
+  url: string
+  type: string
+  category: string
+  name: string
+  createdAt: string
+  feedbackId?: string
 }
 
-export default function PropertyFiles({ property }: PropertyFilesProps) {
-  const [feedback, setFeedback] = useState<Feedback[]>([])
-  const [selectedImage, setSelectedImage] = useState<string | null>(null)
-  const [isLightboxOpen, setIsLightboxOpen] = useState(false)
+export default function PropertyFiles({ propertyId }: { propertyId: string }) {
+  const [files, setFiles] = useState<PropertyFile[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
+  const router = useRouter()
 
   useEffect(() => {
-    setFeedback(getFeedbackByPropertyId(property.id))
-  }, [property.id])
-
-  // Collect all feedback media
-  const feedbackImages: { url: string; source: string }[] = []
-  const feedbackVideos: { url: string; source: string }[] = []
-  const feedbackAudio: { url: string; source: string }[] = []
-
-  feedback.forEach((item) => {
-    if (item.images && item.images.length > 0) {
-      item.images.forEach((image) => {
-        feedbackImages.push({ url: image, source: `Feedback from ${new Date(item.createdAt).toLocaleDateString()}` })
-      })
+    async function fetchFiles() {
+      try {
+        setIsLoading(true)
+        const data = await getPropertyFiles(propertyId)
+        console.log("Files fetched:", data)
+        setFiles(Array.isArray(data) ? data : [])
+      } catch (err) {
+        console.error("Error fetching property files:", err)
+        setError("Failed to load files")
+        setFiles([])
+      } finally {
+        setIsLoading(false)
+      }
     }
-    if (item.video) {
-      feedbackVideos.push({ url: item.video, source: `Feedback from ${new Date(item.createdAt).toLocaleDateString()}` })
-    }
-    if (item.audio) {
-      feedbackAudio.push({ url: item.audio, source: `Feedback from ${new Date(item.createdAt).toLocaleDateString()}` })
-    }
-  })
 
-  // Count total files by category
-  const photosCount = property.photos?.length || 0
-  const floorplansCount = property.floorplans?.length || 0
-  const pdfCount = property.listingPdf ? 1 : 0
-  const feedbackMediaCount = feedbackImages.length + feedbackVideos.length + feedbackAudio.length
+    fetchFiles()
+  }, [propertyId, refreshKey])
 
-  // Check if there are any files
-  const hasFiles = photosCount > 0 || floorplansCount > 0 || pdfCount > 0 || feedbackMediaCount > 0
+  const refreshFiles = () => {
+    setRefreshKey((prev) => prev + 1)
+  }
 
-  if (!hasFiles) {
+  if (isLoading) {
     return (
-      <div className="text-center py-8 border rounded-lg">
-        <FileIcon className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-        <h3 className="text-lg font-medium mb-2">No files yet</h3>
-        <p className="text-muted-foreground">Upload photos, floor plans, or add feedback with media</p>
+      <div className="text-center py-8">
+        <div className="animate-pulse flex flex-col items-center">
+          <div className="h-12 w-12 bg-muted rounded-full mb-4"></div>
+          <div className="h-4 w-32 bg-muted rounded mb-2"></div>
+          <div className="h-4 w-48 bg-muted rounded"></div>
+        </div>
       </div>
     )
   }
 
-  const openLightbox = (imageUrl: string) => {
-    setSelectedImage(imageUrl)
-    setIsLightboxOpen(true)
+  if (error) {
+    return (
+      <div className="text-center py-8 border rounded-lg">
+        <p className="text-destructive">Error: {error}</p>
+        <Button onClick={() => window.location.reload()} className="mt-4">
+          Try Again
+        </Button>
+      </div>
+    )
   }
+
+  if (files.length === 0) {
+    return (
+      <div className="text-center py-8 border rounded-lg">
+        <FileIcon className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+        <h3 className="text-lg font-medium mb-2">No files uploaded</h3>
+        <p className="text-muted-foreground">Upload files using the property edit form or feedback form</p>
+      </div>
+    )
+  }
+
+  // Group files by category
+  const filesByCategory = files.reduce(
+    (acc, file) => {
+      if (!acc[file.category]) {
+        acc[file.category] = []
+      }
+      acc[file.category].push(file)
+      return acc
+    },
+    {} as Record<string, PropertyFile[]>,
+  )
+
+  const categories = Object.keys(filesByCategory)
 
   return (
     <div className="space-y-4">
-      <Tabs defaultValue="all">
-        <TabsList className="grid grid-cols-5">
-          <TabsTrigger value="all">
-            All Files
-            <Badge variant="secondary" className="ml-2">
-              {photosCount + floorplansCount + pdfCount + feedbackMediaCount}
-            </Badge>
-          </TabsTrigger>
-          <TabsTrigger value="photos" disabled={photosCount === 0}>
-            Photos
-            {photosCount > 0 && (
-              <Badge variant="secondary" className="ml-2">
-                {photosCount}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="floorplans" disabled={floorplansCount === 0}>
-            Floor Plans
-            {floorplansCount > 0 && (
-              <Badge variant="secondary" className="ml-2">
-                {floorplansCount}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="documents" disabled={pdfCount === 0}>
-            Documents
-            {pdfCount > 0 && (
-              <Badge variant="secondary" className="ml-2">
-                {pdfCount}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="feedback" disabled={feedbackMediaCount === 0}>
-            Feedback Media
-            {feedbackMediaCount > 0 && (
-              <Badge variant="secondary" className="ml-2">
-                {feedbackMediaCount}
-              </Badge>
-            )}
-          </TabsTrigger>
+      <h3 className="text-lg font-medium">Property Files</h3>
+
+      <Tabs defaultValue={categories[0]} className="w-full">
+        <TabsList className="grid grid-cols-4 mb-4">
+          {categories.includes("property_photo") && (
+            <TabsTrigger value="property_photo">
+              <ImageIcon className="h-4 w-4 mr-2" />
+              Photos
+            </TabsTrigger>
+          )}
+          {categories.includes("floorplan") && (
+            <TabsTrigger value="floorplan">
+              <FileSpreadsheet className="h-4 w-4 mr-2" />
+              Floor Plans
+            </TabsTrigger>
+          )}
+          {categories.includes("listing_pdf") && (
+            <TabsTrigger value="listing_pdf">
+              <FileText className="h-4 w-4 mr-2" />
+              Listing PDFs
+            </TabsTrigger>
+          )}
+          {categories.includes("feedback_media") && (
+            <TabsTrigger value="feedback_media">
+              <Mic className="h-4 w-4 mr-2" />
+              Feedback Media
+            </TabsTrigger>
+          )}
         </TabsList>
 
-        <TabsContent value="all" className="space-y-6">
-          {/* Property Photos */}
-          {photosCount > 0 && (
-            <Card>
-              <CardContent className="p-4">
-                <h3 className="text-lg font-medium mb-3 flex items-center">
-                  <ImageIcon className="mr-2 h-5 w-5 text-muted-foreground" />
-                  Property Photos
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {property.photos?.map((photo, index) => (
-                    <div
-                      key={`photo-${index}`}
-                      className="aspect-square relative bg-muted rounded-md overflow-hidden group cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        openLightbox(photo)
-                      }}
-                    >
-                      <Image
-                        src={photo || "/placeholder.svg"}
-                        alt={`Property photo ${index + 1}`}
-                        fill
-                        className="object-cover"
-                      />
-                      {index === (property.coverPhotoIndex || 0) && (
-                        <div className="absolute top-2 left-2 bg-primary text-primary-foreground text-xs px-2 py-1 rounded-full">
-                          Cover
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Floor Plans */}
-          {floorplansCount > 0 && (
-            <Card>
-              <CardContent className="p-4">
-                <h3 className="text-lg font-medium mb-3 flex items-center">
-                  <FileIcon className="mr-2 h-5 w-5 text-muted-foreground" />
-                  Floor Plans
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {property.floorplans?.map((plan, index) => (
-                    <div
-                      key={`floorplan-${index}`}
-                      className="aspect-square relative bg-muted rounded-md overflow-hidden group cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        openLightbox(plan)
-                      }}
-                    >
-                      <Image
-                        src={plan || "/placeholder.svg"}
-                        alt={`Floor plan ${index + 1}`}
-                        fill
-                        className="object-cover"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Listing PDF */}
-          {property.listingPdf && (
-            <Card>
-              <CardContent className="p-4">
-                <h3 className="text-lg font-medium mb-3 flex items-center">
-                  <FileText className="mr-2 h-5 w-5 text-muted-foreground" />
-                  Documents
-                </h3>
-                <div className="border rounded-md p-3 flex justify-between items-center">
-                  <div className="flex items-center">
-                    <FileText className="h-8 w-8 text-muted-foreground mr-3" />
-                    <div>
-                      <p className="font-medium">Property Listing</p>
-                      <p className="text-sm text-muted-foreground">PDF Document</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" asChild>
-                      <a href={property.listingPdf} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="h-4 w-4 mr-1" />
-                        View
-                      </a>
-                    </Button>
-                    <Button variant="outline" size="sm" asChild>
-                      <a href={property.listingPdf} download>
-                        <Download className="h-4 w-4 mr-1" />
-                        Download
-                      </a>
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Feedback Media */}
-          {feedbackMediaCount > 0 && (
-            <Card>
-              <CardContent className="p-4">
-                <h3 className="text-lg font-medium mb-3 flex items-center">
-                  <ImageIcon className="mr-2 h-5 w-5 text-muted-foreground" />
-                  Feedback Media
-                </h3>
-
-                {/* Feedback Images */}
-                {feedbackImages.length > 0 && (
-                  <div className="mb-4">
-                    <h4 className="text-sm font-medium mb-2">Images</h4>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {feedbackImages.map((image, index) => (
-                        <div
-                          key={`feedback-image-${index}`}
-                          className="aspect-square relative bg-muted rounded-md overflow-hidden group cursor-pointer"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            openLightbox(image.url)
-                          }}
-                        >
-                          <Image
-                            src={image.url || "/placeholder.svg"}
-                            alt={`Feedback image ${index + 1}`}
-                            fill
-                            className="object-cover"
-                          />
-                          <div className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-xs p-1 truncate">
-                            {image.source}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Feedback Videos */}
-                {feedbackVideos.length > 0 && (
-                  <div className="mb-4">
-                    <h4 className="text-sm font-medium mb-2">Videos</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {feedbackVideos.map((video, index) => (
-                        <div key={`feedback-video-${index}`} className="border rounded-md p-3">
-                          <div className="aspect-video bg-muted rounded-md overflow-hidden mb-2">
-                            <video src={video.url} controls className="w-full h-full" />
-                          </div>
-                          <p className="text-xs text-muted-foreground">{video.source}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Feedback Audio */}
-                {feedbackAudio.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-medium mb-2">Audio</h4>
-                    <div className="grid grid-cols-1 gap-3">
-                      {feedbackAudio.map((audio, index) => (
-                        <div key={`feedback-audio-${index}`} className="border rounded-md p-3">
-                          <div className="flex items-center gap-3 mb-2">
-                            <Mic className="h-5 w-5 text-muted-foreground" />
-                            <p className="text-sm">{audio.source}</p>
-                          </div>
-                          <audio src={audio.url} controls className="w-full" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        <TabsContent value="photos" className="space-y-4">
-          {photosCount > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {property.photos?.map((photo, index) => (
-                <div
-                  key={`photo-tab-${index}`}
-                  className="aspect-square relative bg-muted rounded-md overflow-hidden group cursor-pointer"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    openLightbox(photo)
-                  }}
-                >
-                  <Image
-                    src={photo || "/placeholder.svg"}
-                    alt={`Property photo ${index + 1}`}
-                    fill
-                    className="object-cover"
-                  />
-                  {index === (property.coverPhotoIndex || 0) && (
-                    <div className="absolute top-2 left-2 bg-primary text-primary-foreground text-xs px-2 py-1 rounded-full">
-                      Cover
-                    </div>
-                  )}
-                </div>
+        {categories.map((category) => (
+          <TabsContent key={category} value={category} className="mt-0">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {filesByCategory[category].map((file, index) => (
+                <FileCard
+                  key={`${file.id}-${index}`}
+                  file={file}
+                  index={index}
+                  propertyId={propertyId}
+                  onDeleteSuccess={refreshFiles}
+                />
               ))}
             </div>
-          ) : (
-            <div className="text-center py-8 border rounded-lg">
-              <ImageIcon className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium mb-2">No photos yet</h3>
-              <p className="text-muted-foreground">Upload property photos by editing the property</p>
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="floorplans" className="space-y-4">
-          {floorplansCount > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {property.floorplans?.map((plan, index) => (
-                <div
-                  key={`floorplan-tab-${index}`}
-                  className="aspect-square relative bg-muted rounded-md overflow-hidden group cursor-pointer"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    openLightbox(plan)
-                  }}
-                >
-                  <Image
-                    src={plan || "/placeholder.svg"}
-                    alt={`Floor plan ${index + 1}`}
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 border rounded-lg">
-              <FileIcon className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium mb-2">No floor plans yet</h3>
-              <p className="text-muted-foreground">Upload floor plans by editing the property</p>
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="documents" className="space-y-4">
-          {property.listingPdf ? (
-            <div className="border rounded-md p-4 flex justify-between items-center">
-              <div className="flex items-center">
-                <FileText className="h-10 w-10 text-muted-foreground mr-4" />
-                <div>
-                  <p className="font-medium">Property Listing</p>
-                  <p className="text-sm text-muted-foreground">PDF Document</p>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" asChild>
-                  <a href={property.listingPdf} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="h-4 w-4 mr-1" />
-                    View
-                  </a>
-                </Button>
-                <Button variant="outline" size="sm" asChild>
-                  <a href={property.listingPdf} download>
-                    <Download className="h-4 w-4 mr-1" />
-                    Download
-                  </a>
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center py-8 border rounded-lg">
-              <FileText className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium mb-2">No documents yet</h3>
-              <p className="text-muted-foreground">Upload a listing PDF by editing the property</p>
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="feedback" className="space-y-6">
-          {feedbackMediaCount > 0 ? (
-            <>
-              {/* Feedback Images */}
-              {feedbackImages.length > 0 && (
-                <div className="space-y-3">
-                  <h4 className="text-sm font-medium">Images</h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {feedbackImages.map((image, index) => (
-                      <div
-                        key={`feedback-image-tab-${index}`}
-                        className="aspect-square relative bg-muted rounded-md overflow-hidden group cursor-pointer"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          openLightbox(image.url)
-                        }}
-                      >
-                        <Image
-                          src={image.url || "/placeholder.svg"}
-                          alt={`Feedback image ${index + 1}`}
-                          fill
-                          className="object-cover"
-                        />
-                        <div className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-xs p-1 truncate">
-                          {image.source}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Feedback Videos */}
-              {feedbackVideos.length > 0 && (
-                <div className="space-y-3">
-                  <h4 className="text-sm font-medium">Videos</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {feedbackVideos.map((video, index) => (
-                      <div key={`feedback-video-tab-${index}`} className="border rounded-md p-3">
-                        <div className="aspect-video bg-muted rounded-md overflow-hidden mb-2">
-                          <video src={video.url} controls className="w-full h-full" />
-                        </div>
-                        <p className="text-xs text-muted-foreground">{video.source}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Feedback Audio */}
-              {feedbackAudio.length > 0 && (
-                <div className="space-y-3">
-                  <h4 className="text-sm font-medium">Audio</h4>
-                  <div className="grid grid-cols-1 gap-3">
-                    {feedbackAudio.map((audio, index) => (
-                      <div key={`feedback-audio-tab-${index}`} className="border rounded-md p-3">
-                        <div className="flex items-center gap-3 mb-2">
-                          <Mic className="h-5 w-5 text-muted-foreground" />
-                          <p className="text-sm">{audio.source}</p>
-                        </div>
-                        <audio src={audio.url} controls className="w-full" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="text-center py-8 border rounded-lg">
-              <ImageIcon className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium mb-2">No feedback media yet</h3>
-              <p className="text-muted-foreground">Add feedback with images, video, or audio recordings</p>
-            </div>
-          )}
-        </TabsContent>
+          </TabsContent>
+        ))}
       </Tabs>
+    </div>
+  )
+}
 
-      {/* Image Lightbox */}
-      <Dialog open={isLightboxOpen} onOpenChange={setIsLightboxOpen}>
-        <DialogContent className="max-w-4xl p-0 bg-transparent border-none">
-          {selectedImage && (
-            <div className="relative bg-black rounded-lg overflow-hidden">
-              <div className="aspect-[4/3] md:aspect-[16/9] relative">
-                <Image src={selectedImage || "/placeholder.svg"} alt="File preview" fill className="object-contain" />
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute top-2 right-2 text-white bg-black/50 hover:bg-black/70"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setIsLightboxOpen(false)
-                }}
-              >
-                <X className="h-5 w-5" />
+function FileCard({
+  file,
+  index,
+  propertyId,
+  onDeleteSuccess,
+}: {
+  file: PropertyFile
+  index: number
+  propertyId: string
+  onDeleteSuccess: () => void
+}) {
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const router = useRouter()
+
+  const isImage = file.type === "image" || file.type === "property_photo" || file.type === "floorplan"
+  const isVideo = file.type === "video"
+  const isAudio = file.type === "audio"
+  const isPdf = file.type === "pdf" || file.url.endsWith(".pdf")
+
+  const getCategoryLabel = (category: string) => {
+    switch (category) {
+      case "property_photo":
+        return "Property Photo"
+      case "floorplan":
+        return "Floor Plan"
+      case "listing_pdf":
+        return "Listing PDF"
+      case "feedback_media":
+        return `Feedback ${file.type.charAt(0).toUpperCase() + file.type.slice(1)}`
+      default:
+        return category.charAt(0).toUpperCase() + category.slice(1)
+    }
+  }
+
+  const handleDelete = async () => {
+    try {
+      setIsDeleting(true)
+      let result = { success: false, error: "Unknown error" }
+
+      // Handle different file types
+      if (file.category === "feedback_media" && file.id.includes("-")) {
+        // Delete feedback media
+        result = await deleteFile(file.id)
+      } else if (file.category === "property_photo") {
+        // Delete property photo
+        result = await deletePropertyPhoto(propertyId, index)
+      } else if (file.category === "floorplan") {
+        // Delete property floorplan
+        result = await deletePropertyFloorplan(propertyId, index)
+      } else if (file.category === "listing_pdf") {
+        // Delete property listing PDF
+        result = await deletePropertyListingPdf(propertyId)
+      } else {
+        toast({
+          title: "Cannot delete file",
+          description: "This file type cannot be deleted.",
+          variant: "destructive",
+        })
+        setIsDeleting(false)
+        return
+      }
+
+      if (result.success) {
+        toast({
+          title: "File deleted",
+          description: "The file has been deleted successfully.",
+        })
+
+        // Add a small delay before refreshing the page
+        setTimeout(() => {
+          // Perform a full page refresh
+          window.location.reload()
+        }, 1000)
+      } else {
+        toast({
+          title: "Error deleting file",
+          description: result.error || "An unexpected error occurred",
+          variant: "destructive",
+        })
+        setIsDeleting(false)
+      }
+    } catch (error) {
+      console.error("Error deleting file:", error)
+      toast({
+        title: "Error deleting file",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      })
+      setIsDeleting(false)
+    }
+  }
+
+  return (
+    <Card className="overflow-hidden">
+      <div className="aspect-square relative bg-muted">
+        {isImage && (
+          <Image src={file.url || "/placeholder.svg"} alt={file.name || "File"} fill className="object-cover" />
+        )}
+        {isVideo && (
+          <div className="w-full h-full flex items-center justify-center">
+            <Video className="h-12 w-12 text-muted-foreground" />
+          </div>
+        )}
+        {isAudio && (
+          <div className="w-full h-full flex items-center justify-center">
+            <Mic className="h-12 w-12 text-muted-foreground" />
+          </div>
+        )}
+        {isPdf && (
+          <div className="w-full h-full flex items-center justify-center">
+            <FileText className="h-12 w-12 text-muted-foreground" />
+          </div>
+        )}
+        {!isImage && !isVideo && !isAudio && !isPdf && (
+          <div className="w-full h-full flex items-center justify-center">
+            <FileIcon className="h-12 w-12 text-muted-foreground" />
+          </div>
+        )}
+      </div>
+      <CardContent className="p-3">
+        <div className="flex flex-col gap-2">
+          <Badge variant="outline" className="w-fit">
+            {getCategoryLabel(file.category)}
+          </Badge>
+          <div className="flex justify-between items-center">
+            <div className="flex gap-2">
+              <Button variant="ghost" size="icon" asChild>
+                <a href={file.url} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-4 w-4" />
+                  <span className="sr-only">Open</span>
+                </a>
+              </Button>
+              <Button variant="ghost" size="icon" asChild>
+                <a href={file.url} download>
+                  <Download className="h-4 w-4" />
+                  <span className="sr-only">Download</span>
+                </a>
               </Button>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
+            {/* Show delete button for all file types */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setIsDeleteDialogOpen(true)}
+              disabled={isDeleting}
+            >
+              <Trash2 className="h-4 w-4" />
+              <span className="sr-only">Delete</span>
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+
+      <ConfirmationDialog
+        title={`Delete ${getCategoryLabel(file.category)}`}
+        description="Are you sure you want to delete this file? This action cannot be undone."
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        onConfirm={handleDelete}
+        variant="destructive"
+      />
+    </Card>
   )
 }

@@ -3,9 +3,8 @@ import Link from "next/link"
 import { Plus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import PropertyList from "@/components/property-list"
+import PropertyList, { PropertyListSkeleton } from "@/components/property-list"
 import AddPropertyForm from "@/components/add-property-form"
-import { Skeleton } from "@/components/ui/skeleton"
 
 export default function HomePage() {
   return (
@@ -30,7 +29,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      <div className="grid gap-8">
+      <div className="grid gap-8 mt-8">
         <section>
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-2xl font-semibold">Your Properties</h2>
@@ -46,23 +45,6 @@ export default function HomePage() {
           <AddPropertyForm />
         </section>
       </div>
-    </div>
-  )
-}
-
-function PropertyListSkeleton() {
-  return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {Array(3)
-        .fill(0)
-        .map((_, i) => (
-          <div key={i} className="border rounded-lg p-4">
-            <Skeleton className="h-[200px] w-full mb-4" />
-            <Skeleton className="h-6 w-3/4 mb-2" />
-            <Skeleton className="h-4 w-full mb-2" />
-            <Skeleton className="h-4 w-2/3" />
-          </div>
-        ))}
     </div>
   )
 }

@@ -1,33 +1,112 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-
 import { useEffect, useState } from "react"
 import { format } from "date-fns"
-import { Calendar, Clock, User, Edit } from "lucide-react" // Added Edit import
-import EditBookingDialog from "@/components/edit-booking-dialog" // Added EditBookingDialog import
-
+import { Calendar, Clock, User, Edit, Trash2 } from "lucide-react"
+import EditBookingDialog from "@/components/edit-booking-dialog"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { getBookingsByPropertyId } from "@/lib/data"
 import type { Booking } from "@/lib/types"
 import { Button } from "@/components/ui/button"
+import { deleteBooking } from "@/lib/actions"
+import { toast } from "@/components/ui/use-toast"
+import ConfirmationDialog from "@/components/confirmation-dialog"
 
 export default function PropertyBookings({ propertyId }: { propertyId: string }) {
   const [bookings, setBookings] = useState<Booking[]>([])
-  const [editingBooking, setEditingBooking] = useState<Booking | null>(null) // Added state variable
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false) // Added state variable
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [editingBooking, setEditingBooking] = useState<Booking | null>(null)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [deletingBookingId, setDeletingBookingId] = useState<string | null>(null)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+
+  const refreshBookings = () => {
+    setRefreshTrigger((prev) => prev + 1)
+  }
 
   useEffect(() => {
-    setBookings(getBookingsByPropertyId(propertyId))
-  }, [propertyId])
+    async function fetchBookings() {
+      try {
+        setIsLoading(true)
+        const data = await getBookingsByPropertyId(propertyId)
+        // Ensure we always have an array, even if the API returns null or undefined
+        setBookings(Array.isArray(data) ? data : [])
+      } catch (err) {
+        console.error("Error fetching bookings:", err)
+        setError("Failed to load bookings")
+        setBookings([])
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchBookings()
+  }, [propertyId, refreshTrigger])
 
   const handleEditComplete = () => {
-    // Added function
     setIsEditDialogOpen(false)
     setEditingBooking(null)
-    // Refresh the bookings list
-    setBookings(getBookingsByPropertyId(propertyId))
+
+    // Trigger a refresh by updating the refreshTrigger state
+    refreshBookings()
+  }
+
+  const handleDeleteBooking = async () => {
+    if (!deletingBookingId) return
+
+    try {
+      const result = await deleteBooking(deletingBookingId)
+
+      if (result.success) {
+        toast({
+          title: "Viewing deleted",
+          description: "The viewing has been deleted successfully.",
+        })
+        refreshBookings()
+      } else {
+        toast({
+          title: "Error deleting viewing",
+          description: result.error || "An unexpected error occurred",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error deleting viewing:", error)
+      toast({
+        title: "Error deleting viewing",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      })
+    } finally {
+      setDeletingBookingId(null)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="text-center py-8">
+        <div className="animate-pulse flex flex-col items-center">
+          <div className="h-12 w-12 bg-muted rounded-full mb-4"></div>
+          <div className="h-4 w-32 bg-muted rounded mb-2"></div>
+          <div className="h-4 w-48 bg-muted rounded"></div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-8 border rounded-lg">
+        <p className="text-destructive">Error: {error}</p>
+        <Button onClick={() => window.location.reload()} className="mt-4">
+          Try Again
+        </Button>
+      </div>
+    )
   }
 
   if (bookings.length === 0) {
@@ -91,6 +170,18 @@ export default function PropertyBookings({ propertyId }: { propertyId: string })
                   <Edit className="h-4 w-4 mr-2" />
                   Edit
                 </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => {
+                    setDeletingBookingId(booking.id)
+                    setIsDeleteDialogOpen(true)
+                  }}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -101,6 +192,14 @@ export default function PropertyBookings({ propertyId }: { propertyId: string })
         open={isEditDialogOpen}
         onOpenChange={setIsEditDialogOpen}
         onEditComplete={handleEditComplete}
+      />
+      <ConfirmationDialog
+        title="Delete Viewing"
+        description="Are you sure you want to delete this viewing? This action cannot be undone."
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        onConfirm={handleDeleteBooking}
+        variant="destructive"
       />
     </div>
   )

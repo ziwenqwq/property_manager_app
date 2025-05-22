@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { Loader2, Upload, X, ImageIcon } from "lucide-react"
+import { Loader2, Upload, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { addProperty } from "@/lib/data"
+import { createProperty } from "@/lib/actions"
+import { toast } from "@/components/ui/use-toast"
 
 const formSchema = z.object({
   name: z.string().min(1, "Property name is required"),
@@ -60,25 +61,57 @@ export default function AddPropertyForm() {
     },
   })
 
-  function onSubmit(values: FormValues) {
+  async function onSubmit(values: FormValues) {
     setIsSubmitting(true)
 
-    // In a real app, you would upload files here
-    // For this demo, we'll just simulate the process
+    try {
+      // Create a FormData object to handle file uploads
+      const formData = new FormData()
+      formData.append("name", values.name)
+      if (values.address) formData.append("address", values.address)
+      if (values.listingAgent) formData.append("listingAgent", values.listingAgent)
+      if (values.listingPrice) formData.append("listingPrice", values.listingPrice.toString())
+      if (values.squareFootage) formData.append("squareFootage", values.squareFootage.toString())
+      if (values.bedrooms) formData.append("bedrooms", values.bedrooms.toString())
+      if (values.listingUrl) formData.append("listingUrl", values.listingUrl)
 
-    setTimeout(() => {
-      const newProperty = addProperty({
-        ...values,
-        listingPdf: pdfFile ? URL.createObjectURL(pdfFile) : undefined,
-        floorplans: floorplanFiles.length > 0 ? floorplanFiles.map((f) => URL.createObjectURL(f)) : undefined,
-        photos: photoFiles.length > 0 ? photoFiles.map((f) => URL.createObjectURL(f)) : undefined,
-        coverPhotoIndex: photoFiles.length > 0 ? 0 : undefined, // Set first photo as cover by default
+      // Add files
+      if (pdfFile) formData.append("listingPdf", pdfFile)
+
+      floorplanFiles.forEach((file) => {
+        formData.append("floorplans", file)
       })
 
+      photoFiles.forEach((file) => {
+        formData.append("photos", file)
+      })
+
+      const result = await createProperty(formData)
+
+      if (result.success && result.propertyId) {
+        toast({
+          title: "Property added successfully",
+          description: "Your property has been added to the system.",
+        })
+        router.push(`/properties/${result.propertyId}`)
+        router.refresh()
+      } else {
+        toast({
+          title: "Error adding property",
+          description: result.error || "An unexpected error occurred",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error adding property:", error)
+      toast({
+        title: "Error adding property",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      })
+    } finally {
       setIsSubmitting(false)
-      router.push(`/properties/${newProperty.id}`)
-      router.refresh()
-    }, 1000)
+    }
   }
 
   return (
@@ -186,6 +219,7 @@ export default function AddPropertyForm() {
         />
 
         <div className="space-y-4">
+          {/* Property Photos Upload */}
           <FormField
             control={form.control}
             name="photos"
@@ -196,7 +230,7 @@ export default function AddPropertyForm() {
                   <div className="mt-1">
                     <div className="flex items-center justify-center border border-dashed rounded-md p-4">
                       <label htmlFor="photos" className="cursor-pointer text-center">
-                        <ImageIcon className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
+                        <Upload className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
                         <span className="text-sm font-medium">Upload Property Photos</span>
                         <span className="text-xs text-muted-foreground block mt-1">
                           Click to browse (can select multiple)
@@ -232,7 +266,7 @@ export default function AddPropertyForm() {
                               onClick={() => {
                                 const updatedFiles = photoFiles.filter((_, i) => i !== index)
                                 setPhotoFiles(updatedFiles)
-                                onChange(updatedFiles.length > 0 ? updatedFiles : undefined)
+                                onChange(updatedFiles)
                               }}
                             >
                               <X className="h-3 w-3" />
@@ -243,7 +277,6 @@ export default function AddPropertyForm() {
                     )}
                   </div>
                 </FormControl>
-                <FormDescription>First photo will be used as the cover image by default</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -346,7 +379,7 @@ export default function AddPropertyForm() {
                               onClick={() => {
                                 const updatedFiles = floorplanFiles.filter((_, i) => i !== index)
                                 setFloorplanFiles(updatedFiles)
-                                onChange(updatedFiles.length > 0 ? updatedFiles : undefined)
+                                onChange(updatedFiles)
                               }}
                             >
                               <X className="h-3 w-3" />

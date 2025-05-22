@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Image from "next/image"
 import { format } from "date-fns"
-import { MessageSquare, ImageIcon, Video, Mic, Edit } from "lucide-react"
+import { MessageSquare, ImageIcon, Video, Mic, Edit, Trash2 } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -11,21 +11,101 @@ import { getFeedbackByPropertyId } from "@/lib/data"
 import type { Feedback } from "@/lib/types"
 import EditFeedbackDialog from "@/components/edit-feedback-dialog"
 import { Button } from "@/components/ui/button"
+import { deleteFeedback } from "@/lib/actions"
+import { toast } from "@/components/ui/use-toast"
+import ConfirmationDialog from "@/components/confirmation-dialog"
 
 export default function PropertyFeedback({ propertyId }: { propertyId: string }) {
   const [feedback, setFeedback] = useState<Feedback[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [editingFeedback, setEditingFeedback] = useState<Feedback | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [deletingFeedbackId, setDeletingFeedbackId] = useState<string | null>(null)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
+
+  const refreshFeedback = () => {
+    setRefreshTrigger((prev) => prev + 1)
+  }
 
   useEffect(() => {
-    setFeedback(getFeedbackByPropertyId(propertyId))
-  }, [propertyId])
+    async function fetchFeedback() {
+      try {
+        setIsLoading(true)
+        const data = await getFeedbackByPropertyId(propertyId)
+        // Ensure we always have an array, even if the API returns null or undefined
+        setFeedback(Array.isArray(data) ? data : [])
+      } catch (err) {
+        console.error("Error fetching feedback:", err)
+        setError("Failed to load feedback")
+        setFeedback([])
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchFeedback()
+  }, [propertyId, refreshTrigger])
 
   const handleEditComplete = () => {
     setIsEditDialogOpen(false)
     setEditingFeedback(null)
-    // Refresh the feedback list
-    setFeedback(getFeedbackByPropertyId(propertyId))
+    refreshFeedback()
+  }
+
+  const handleDeleteFeedback = async () => {
+    if (!deletingFeedbackId) return
+
+    try {
+      const result = await deleteFeedback(deletingFeedbackId)
+
+      if (result.success) {
+        toast({
+          title: "Feedback deleted",
+          description: "The feedback has been deleted successfully.",
+        })
+        refreshFeedback()
+      } else {
+        toast({
+          title: "Error deleting feedback",
+          description: result.error || "An unexpected error occurred",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error deleting feedback:", error)
+      toast({
+        title: "Error deleting feedback",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      })
+    } finally {
+      setDeletingFeedbackId(null)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="text-center py-8">
+        <div className="animate-pulse flex flex-col items-center">
+          <div className="h-12 w-12 bg-muted rounded-full mb-4"></div>
+          <div className="h-4 w-32 bg-muted rounded mb-2"></div>
+          <div className="h-4 w-48 bg-muted rounded"></div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-8 border rounded-lg">
+        <p className="text-destructive">Error: {error}</p>
+        <Button onClick={() => window.location.reload()} className="mt-4">
+          Try Again
+        </Button>
+      </div>
+    )
   }
 
   if (feedback.length === 0) {
@@ -75,7 +155,7 @@ export default function PropertyFeedback({ propertyId }: { propertyId: string })
                         {item.images.map((image, index) => (
                           <div key={index} className="aspect-square relative bg-muted rounded-md overflow-hidden">
                             <Image
-                              src="/placeholder.svg?height=200&width=200"
+                              src={image || "/placeholder.svg?height=200&width=200"}
                               alt={`Feedback image ${index + 1}`}
                               fill
                               className="object-cover"
@@ -115,6 +195,18 @@ export default function PropertyFeedback({ propertyId }: { propertyId: string })
                   <Edit className="h-4 w-4 mr-2" />
                   Edit
                 </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => {
+                    setDeletingFeedbackId(item.id)
+                    setIsDeleteDialogOpen(true)
+                  }}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -125,6 +217,14 @@ export default function PropertyFeedback({ propertyId }: { propertyId: string })
         open={isEditDialogOpen}
         onOpenChange={setIsEditDialogOpen}
         onEditComplete={handleEditComplete}
+      />
+      <ConfirmationDialog
+        title="Delete Feedback"
+        description="Are you sure you want to delete this feedback? This action cannot be undone and will remove all associated media."
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        onConfirm={handleDeleteFeedback}
+        variant="destructive"
       />
     </div>
   )

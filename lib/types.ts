@@ -10,7 +10,6 @@ export interface Property {
   listingPdf?: string
   floorplans?: string[]
   photos?: string[]
-  coverPhotoIndex?: number
   rating?: number | null
   createdAt: string
   updatedAt: string

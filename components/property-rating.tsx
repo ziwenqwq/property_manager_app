@@ -1,11 +1,8 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
 import { Star } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { updatePropertyRating } from "@/lib/data"
 import { useRouter } from "next/navigation"
 
 import {
@@ -18,6 +15,8 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
+import { rateProperty } from "@/lib/actions"
+import { toast } from "@/components/ui/use-toast"
 
 interface PropertyRatingProps {
   propertyId: string
@@ -37,6 +36,7 @@ export default function PropertyRating({
   const router = useRouter()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [newRating, setNewRating] = useState<number>(rating || 5)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const sizeClasses = {
     sm: "text-xs",
@@ -44,25 +44,81 @@ export default function PropertyRating({
     lg: "text-base",
   }
 
-  const handleRatingChange = () => {
-    updatePropertyRating(propertyId, newRating)
-    setIsDialogOpen(false)
-    router.refresh()
-    window.location.reload()
+  const handleRatingChange = async () => {
+    setIsSubmitting(true)
+
+    try {
+      const result = await rateProperty(propertyId, newRating)
+
+      if (result.success) {
+        toast({
+          title: "Rating updated",
+          description: "The property rating has been updated successfully.",
+        })
+        setIsDialogOpen(false)
+
+        // Force a more complete refresh
+        router.refresh()
+
+        // Add a small delay before redirecting to ensure state is updated
+        setTimeout(() => {
+          window.location.href = window.location.href
+        }, 300)
+      } else {
+        toast({
+          title: "Error updating rating",
+          description: result.error || "An unexpected error occurred",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error updating rating:", error)
+      toast({
+        title: "Error updating rating",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const handleClearRating = () => {
-    updatePropertyRating(propertyId, null)
-    setIsDialogOpen(false)
-    router.refresh()
-    window.location.reload()
-  }
+  const handleClearRating = async () => {
+    setIsSubmitting(true)
 
-  const handleRatingClick = (e: React.MouseEvent) => {
-    if (editable) {
-      e.preventDefault()
-      e.stopPropagation()
-      setIsDialogOpen(true)
+    try {
+      const result = await rateProperty(propertyId, null)
+
+      if (result.success) {
+        toast({
+          title: "Rating cleared",
+          description: "The property rating has been cleared successfully.",
+        })
+        setIsDialogOpen(false)
+
+        // Force a more complete refresh
+        router.refresh()
+
+        // Add a small delay before redirecting to ensure state is updated
+        setTimeout(() => {
+          window.location.href = window.location.href
+        }, 300)
+      } else {
+        toast({
+          title: "Error clearing rating",
+          description: result.error || "An unexpected error occurred",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error clearing rating:", error)
+      toast({
+        title: "Error clearing rating",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -75,7 +131,7 @@ export default function PropertyRating({
           sizeClasses[size],
           className,
         )}
-        onClick={handleRatingClick}
+        onClick={() => editable && setIsDialogOpen(true)}
       >
         <div
           className={cn(
@@ -123,10 +179,10 @@ export default function PropertyRating({
             </div>
           </div>
           <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={handleClearRating} className="sm:w-auto w-full">
+            <Button variant="outline" onClick={handleClearRating} className="sm:w-auto w-full" disabled={isSubmitting}>
               Clear Rating
             </Button>
-            <Button onClick={handleRatingChange} className="sm:w-auto w-full">
+            <Button onClick={handleRatingChange} className="sm:w-auto w-full" disabled={isSubmitting}>
               Save Rating
             </Button>
           </DialogFooter>

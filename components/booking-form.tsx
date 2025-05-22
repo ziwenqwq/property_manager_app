@@ -1,155 +1,124 @@
 "use client"
 
+import type React from "react"
 import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
-import { Loader2 } from "lucide-react"
-import { format } from "date-fns"
-
-import { Button } from "@/components/ui/button"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
-import { addBooking } from "@/lib/data"
+import { format } from "date-fns"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { useToast } from "@/components/ui/use-toast"
+import { createBooking } from "@/lib/actions"
 
-const formSchema = z.object({
-  estateAgent: z.string().optional(),
-  date: z.date({
-    required_error: "Please select a date",
-  }),
-  time: z.string().min(1, "Please select a time"),
-  notes: z.string().optional(),
-})
+interface BookingFormProps {
+  propertyId: string
+  onSuccess?: () => void
+}
 
-type FormValues = z.infer<typeof formSchema>
-
-export default function BookingForm({ propertyId }: { propertyId: string }) {
-  const router = useRouter()
+const BookingForm: React.FC<BookingFormProps> = ({ propertyId, onSuccess }) => {
+  const [selectedDate, setSelectedDate] = useState<Date>()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const { toast } = useToast()
 
-  const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      estateAgent: "",
-      time: "",
-      notes: "",
-    },
-  })
-
-  function onSubmit(values: FormValues) {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
     setIsSubmitting(true)
 
-    setTimeout(() => {
-      addBooking({
-        ...values,
-        propertyId,
-        name: values.estateAgent || "Unspecified",
-        email: "viewing@record.internal",
-        status: "scheduled",
+    try {
+      const formData = new FormData(e.currentTarget)
+      formData.append("propertyId", propertyId)
+
+      const result = await createBooking(formData)
+
+      if (result.success) {
+        toast({
+          title: "Booking created",
+          description: "The viewing has been scheduled successfully.",
+        })
+
+        // Reset form
+        e.currentTarget.reset()
+        setSelectedDate(undefined)
+
+        // Call onSuccess callback if provided
+        if (onSuccess) {
+          onSuccess()
+        }
+
+        // Force a more complete refresh
+        window.location.href = window.location.href
+      } else {
+        toast({
+          title: "Error creating booking",
+          description: result.error || "An unexpected error occurred",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error creating booking:", error)
+      toast({
+        title: "Error creating booking",
+        description: "An unexpected error occurred",
+        variant: "destructive",
       })
-
+    } finally {
       setIsSubmitting(false)
-      form.reset()
-      router.refresh()
-
-      // Force a refresh of the page to show the new booking immediately
-      window.location.reload()
-    }, 1000)
+    }
   }
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <FormField
-          control={form.control}
-          name="estateAgent"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Estate Agent's Name (optional)</FormLabel>
-              <FormControl>
-                <Input placeholder="Enter estate agent's name" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField
-            control={form.control}
-            name="date"
-            render={({ field }) => (
-              <FormItem className="flex flex-col">
-                <FormLabel>Viewing Date</FormLabel>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <FormControl>
-                      <Button
-                        variant={"outline"}
-                        className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}
-                      >
-                        {field.value ? format(field.value, "PPP") : <span>Select date</span>}
-                      </Button>
-                    </FormControl>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={field.value}
-                      onSelect={field.onChange}
-                      disabled={(date) => date < new Date()}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="time"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Viewing Time</FormLabel>
-                <FormControl>
-                  <Input type="time" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+    <form onSubmit={handleSubmit} className="grid gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="firstName">First Name</Label>
+          <Input type="text" id="firstName" name="firstName" required />
         </div>
-
-        <FormField
-          control={form.control}
-          name="notes"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Notes (optional)</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder="Any special arrangements or details about the viewing"
-                  className="resize-none"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <Button type="submit" className="w-full" disabled={isSubmitting}>
-          {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {isSubmitting ? "Saving..." : "Save Viewing Information"}
-        </Button>
-      </form>
-    </Form>
+        <div>
+          <Label htmlFor="lastName">Last Name</Label>
+          <Input type="text" id="lastName" name="lastName" required />
+        </div>
+      </div>
+      <div>
+        <Label htmlFor="email">Email</Label>
+        <Input type="email" id="email" name="email" required />
+      </div>
+      <div>
+        <Label htmlFor="phone">Phone Number</Label>
+        <Input type="tel" id="phone" name="phone" required />
+      </div>
+      <div>
+        <Label htmlFor="date">Preferred Date</Label>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant={"outline"}
+              className={cn("w-[280px] justify-start text-left font-normal", !selectedDate && "text-muted-foreground")}
+            >
+              {selectedDate ? format(selectedDate, "PPP") : <span>Pick a date</span>}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={setSelectedDate}
+              disabled={(date) => date < new Date()}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
+        {selectedDate && <input type="hidden" name="date" value={selectedDate.toISOString()} />}
+      </div>
+      <div>
+        <Label htmlFor="message">Message</Label>
+        <Textarea id="message" name="message" rows={4} />
+      </div>
+      <Button disabled={isSubmitting}>{isSubmitting ? "Submitting..." : "Request a Viewing"}</Button>
+    </form>
   )
 }
+
+export default BookingForm

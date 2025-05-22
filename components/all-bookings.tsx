@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { format } from "date-fns"
-import { Calendar, Clock, Home, User, Edit } from "lucide-react"
+import { Calendar, Clock, Home, User, Edit, Trash2 } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -12,11 +12,18 @@ import { cn } from "@/lib/utils"
 import { getAllBookings } from "@/lib/data"
 import type { Booking } from "@/lib/types"
 import EditBookingDialog from "@/components/edit-booking-dialog"
+import { deleteBooking } from "@/lib/actions"
+import { toast } from "@/components/ui/use-toast"
+import ConfirmationDialog from "@/components/confirmation-dialog"
+import { useRouter } from "next/navigation"
 
 export default function AllBookings() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [deletingBookingId, setDeletingBookingId] = useState<string | null>(null)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
     setBookings(getAllBookings())
@@ -27,6 +34,39 @@ export default function AllBookings() {
     setEditingBooking(null)
     // Refresh the bookings list
     setBookings(getAllBookings())
+  }
+
+  const handleDeleteBooking = async () => {
+    if (!deletingBookingId) return
+
+    try {
+      const result = await deleteBooking(deletingBookingId)
+
+      if (result.success) {
+        toast({
+          title: "Viewing deleted",
+          description: "The viewing has been deleted successfully.",
+        })
+        // Refresh the bookings list
+        setBookings(getAllBookings())
+        router.refresh()
+      } else {
+        toast({
+          title: "Error deleting viewing",
+          description: result.error || "An unexpected error occurred",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error deleting viewing:", error)
+      toast({
+        title: "Error deleting viewing",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      })
+    } finally {
+      setDeletingBookingId(null)
+    }
   }
 
   if (bookings.length === 0) {
@@ -102,6 +142,18 @@ export default function AllBookings() {
                 <Edit className="h-4 w-4 mr-2" />
                 Edit
               </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => {
+                  setDeletingBookingId(booking.id)
+                  setIsDeleteDialogOpen(true)
+                }}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -111,6 +163,14 @@ export default function AllBookings() {
         open={isEditDialogOpen}
         onOpenChange={setIsEditDialogOpen}
         onEditComplete={handleEditComplete}
+      />
+      <ConfirmationDialog
+        title="Delete Viewing"
+        description="Are you sure you want to delete this viewing? This action cannot be undone."
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        onConfirm={handleDeleteBooking}
+        variant="destructive"
       />
     </div>
   )

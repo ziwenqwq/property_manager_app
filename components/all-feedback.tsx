@@ -4,19 +4,26 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { format } from "date-fns"
-import { MessageSquare, Home, ImageIcon, Video, Mic, Edit } from "lucide-react"
+import { MessageSquare, Home, ImageIcon, Video, Mic, Edit, Trash2 } from "lucide-react"
 import EditFeedbackDialog from "@/components/edit-feedback-dialog"
+import { useRouter } from "next/navigation"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { getAllFeedback } from "@/lib/data"
 import type { Feedback } from "@/lib/types"
+import { deleteFeedback } from "@/lib/actions"
+import { toast } from "@/components/ui/use-toast"
+import ConfirmationDialog from "@/components/confirmation-dialog"
 
 export default function AllFeedback() {
   const [feedback, setFeedback] = useState<Feedback[]>([])
   const [editingFeedback, setEditingFeedback] = useState<Feedback | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [deletingFeedbackId, setDeletingFeedbackId] = useState<string | null>(null)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
     setFeedback(getAllFeedback())
@@ -27,6 +34,39 @@ export default function AllFeedback() {
     setEditingFeedback(null)
     // Refresh the feedback list
     setFeedback(getAllFeedback())
+  }
+
+  const handleDeleteFeedback = async () => {
+    if (!deletingFeedbackId) return
+
+    try {
+      const result = await deleteFeedback(deletingFeedbackId)
+
+      if (result.success) {
+        toast({
+          title: "Feedback deleted",
+          description: "The feedback has been deleted successfully.",
+        })
+        // Refresh the feedback list
+        setFeedback(getAllFeedback())
+        router.refresh()
+      } else {
+        toast({
+          title: "Error deleting feedback",
+          description: result.error || "An unexpected error occurred",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error deleting feedback:", error)
+      toast({
+        title: "Error deleting feedback",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      })
+    } finally {
+      setDeletingFeedbackId(null)
+    }
   }
 
   if (feedback.length === 0) {
@@ -122,6 +162,18 @@ export default function AllFeedback() {
                 <Edit className="h-4 w-4 mr-2" />
                 Edit
               </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => {
+                  setDeletingFeedbackId(item.id)
+                  setIsDeleteDialogOpen(true)
+                }}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -131,6 +183,14 @@ export default function AllFeedback() {
         open={isEditDialogOpen}
         onOpenChange={setIsEditDialogOpen}
         onEditComplete={handleEditComplete}
+      />
+      <ConfirmationDialog
+        title="Delete Feedback"
+        description="Are you sure you want to delete this feedback? This action cannot be undone and will remove all associated media."
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        onConfirm={handleDeleteFeedback}
+        variant="destructive"
       />
     </div>
   )

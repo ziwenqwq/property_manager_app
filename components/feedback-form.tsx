@@ -14,7 +14,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { addFeedback } from "@/lib/data"
+import { createFeedback } from "@/lib/actions"
+import { toast } from "@/components/ui/use-toast"
 
 const formSchema = z.object({
   text: z.string().min(1, "Feedback text is required"),
@@ -46,32 +47,66 @@ export default function FeedbackForm({ propertyId }: { propertyId: string }) {
     },
   })
 
-  function onSubmit(values: FormValues) {
+  async function onSubmit(values: FormValues) {
     setIsSubmitting(true)
 
-    // In a real app, you would upload files here
-    // For this demo, we'll just simulate the process
+    try {
+      // Create a FormData object to handle file uploads
+      const formData = new FormData()
+      formData.append("propertyId", propertyId)
+      formData.append("text", values.text)
 
-    setTimeout(() => {
-      addFeedback({
-        ...values,
-        propertyId,
-        images: imageFiles.length > 0 ? imageFiles.map((f) => URL.createObjectURL(f)) : undefined,
-        video: videoFile ? URL.createObjectURL(videoFile) : undefined,
-        audio: audioFile ? URL.createObjectURL(audioFile) : audioURL,
+      // Add image files
+      imageFiles.forEach((file) => {
+        formData.append("images", file)
       })
 
-      setIsSubmitting(false)
-      form.reset()
-      setImageFiles([])
-      setVideoFile(null)
-      setAudioFile(null)
-      setAudioURL(null)
-      router.refresh()
+      // Add video file
+      if (videoFile) {
+        formData.append("video", videoFile)
+      }
 
-      // Force a refresh of the page to show the new feedback immediately
-      window.location.reload()
-    }, 1000)
+      // Add audio file or recorded audio
+      if (audioFile) {
+        formData.append("audio", audioFile)
+      } else if (audioURL) {
+        // Convert the audio URL to a file
+        const response = await fetch(audioURL)
+        const blob = await response.blob()
+        const file = new File([blob], "recording.wav", { type: "audio/wav" })
+        formData.append("audio", file)
+      }
+
+      const result = await createFeedback(formData)
+
+      if (result.success) {
+        toast({
+          title: "Feedback submitted",
+          description: "Your feedback has been submitted successfully.",
+        })
+        form.reset()
+        setImageFiles([])
+        setVideoFile(null)
+        setAudioFile(null)
+        setAudioURL(null)
+        router.refresh()
+      } else {
+        toast({
+          title: "Error submitting feedback",
+          description: result.error || "An unexpected error occurred",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error submitting feedback:", error)
+      toast({
+        title: "Error submitting feedback",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
