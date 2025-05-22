@@ -1,9 +1,6 @@
 import { createServerClient } from "./supabase"
 import type { Property, Booking, Feedback } from "./types"
 
-// Add this export at the top of the file to make it available for client components
-export { getProperties }
-
 // Property functions
 export async function getProperties(): Promise<Property[]> {
   const supabase = createServerClient()
