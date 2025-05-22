@@ -486,30 +486,44 @@ export async function getBookingsByPropertyId(propertyId: string): Promise<Booki
   }
 }
 
+// Update the addBooking function to avoid using the check_column_exists RPC function
+// Replace the existing addBooking function with this implementation:
+
 export async function addBooking(data: Omit<Booking, "id" | "propertyName" | "createdAt">): Promise<Booking | null> {
   const supabase = createServerClient()
 
-  const { data: newBooking, error } = await supabase
-    .from("bookings")
-    .insert({
+  try {
+    // Prepare the booking data with all possible fields
+    // If a column doesn't exist, Supabase will ignore it
+    const bookingData: any = {
       property_id: data.propertyId,
       date: data.date,
       time: data.time,
-      estate_agent: data.name,
       notes: data.notes,
-    })
-    .select(`
-      *,
-      properties(name)
-    `)
-    .single()
+      estate_agent: data.name || "Unspecified",
+      status: data.status || "scheduled",
+    }
 
-  if (error) {
-    console.error("Error adding booking:", error)
+    // Insert the booking
+    const { data: newBooking, error } = await supabase
+      .from("bookings")
+      .insert(bookingData)
+      .select(`
+        *,
+        properties(name)
+      `)
+      .single()
+
+    if (error) {
+      console.error("Error adding booking:", error)
+      return null
+    }
+
+    return mapDbBookingToBooking(newBooking)
+  } catch (error) {
+    console.error("Error in addBooking:", error)
     return null
   }
-
-  return mapDbBookingToBooking(newBooking)
 }
 
 export async function updateBooking(

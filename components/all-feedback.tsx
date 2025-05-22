@@ -19,6 +19,8 @@ import ConfirmationDialog from "@/components/confirmation-dialog"
 
 export default function AllFeedback() {
   const [feedback, setFeedback] = useState<Feedback[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [editingFeedback, setEditingFeedback] = useState<Feedback | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [deletingFeedbackId, setDeletingFeedbackId] = useState<string | null>(null)
@@ -26,14 +28,26 @@ export default function AllFeedback() {
   const router = useRouter()
 
   useEffect(() => {
-    const fetchFeedback = async () => {
+    async function fetchFeedback() {
       try {
+        setIsLoading(true)
+        setError(null)
         const result = await getAllFeedback()
-        // Ensure feedback is always an array
-        setFeedback(Array.isArray(result) ? result : [])
-      } catch (error) {
-        console.error("Error fetching feedback:", error)
+
+        // Ensure result is an array
+        if (Array.isArray(result)) {
+          setFeedback(result)
+        } else {
+          console.error("Expected array but got:", result)
+          setFeedback([])
+          setError("Failed to load feedback data. Please try again later.")
+        }
+      } catch (err) {
+        console.error("Error fetching feedback:", err)
+        setError("An error occurred while loading feedback. Please try again later.")
         setFeedback([])
+      } finally {
+        setIsLoading(false)
       }
     }
 
@@ -43,8 +57,21 @@ export default function AllFeedback() {
   const handleEditComplete = () => {
     setIsEditDialogOpen(false)
     setEditingFeedback(null)
+
     // Refresh the feedback list
-    setFeedback(getAllFeedback())
+    async function refreshFeedback() {
+      try {
+        const result = await getAllFeedback()
+        if (Array.isArray(result)) {
+          setFeedback(result)
+        }
+      } catch (err) {
+        console.error("Error refreshing feedback:", err)
+      }
+    }
+
+    refreshFeedback()
+    router.refresh()
   }
 
   const handleDeleteFeedback = async () => {
@@ -58,8 +85,11 @@ export default function AllFeedback() {
           title: "Feedback deleted",
           description: "The feedback has been deleted successfully.",
         })
-        // Refresh the feedback list
-        setFeedback(getAllFeedback())
+
+        // Update local state immediately
+        setFeedback((prevFeedback) => prevFeedback.filter((item) => item.id !== deletingFeedbackId))
+
+        // Also refresh from server
         router.refresh()
       } else {
         toast({
@@ -77,116 +107,143 @@ export default function AllFeedback() {
       })
     } finally {
       setDeletingFeedbackId(null)
+      setIsDeleteDialogOpen(false)
     }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="text-center py-12 border rounded-lg">
+        <div className="animate-pulse flex flex-col items-center">
+          <div className="h-12 w-12 bg-muted rounded-full mb-4"></div>
+          <div className="h-4 bg-muted rounded w-1/3 mb-2"></div>
+          <div className="h-4 bg-muted rounded w-1/4 mb-4"></div>
+          <div className="h-10 bg-muted rounded w-1/4"></div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12 border rounded-lg">
+        <MessageSquare className="mx-auto h-12 w-12 text-destructive mb-4" />
+        <h3 className="text-lg font-medium mb-2">Error Loading Feedback</h3>
+        <p className="text-muted-foreground mb-4">{error}</p>
+        <Button onClick={() => router.refresh()}>Try Again</Button>
+      </div>
+    )
+  }
+
+  if (feedback.length === 0) {
+    return (
+      <div className="text-center py-12 border rounded-lg">
+        <MessageSquare className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+        <h3 className="text-lg font-medium mb-2">No feedback yet</h3>
+        <p className="text-muted-foreground mb-4">Add feedback for one of your properties</p>
+        <Button asChild>
+          <Link href="/">Browse Properties</Link>
+        </Button>
+      </div>
+    )
   }
 
   return (
     <div className="grid gap-4">
-      {Array.isArray(feedback) && feedback.length > 0 ? (
-        feedback.map((item) => (
-          <Card key={item.id}>
-            <CardContent className="p-4">
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex items-center gap-2">
-                  <Home className="h-4 w-4 text-muted-foreground" />
-                  <Link href={`/properties/${item.propertyId}`} className="font-medium hover:underline">
-                    {item.propertyName}
-                  </Link>
-                </div>
-                <div className="text-xs text-muted-foreground">{format(new Date(item.createdAt), "MMM d, yyyy")}</div>
+      {feedback.map((item) => (
+        <Card key={item.id}>
+          <CardContent className="p-4">
+            <div className="flex justify-between items-start mb-2">
+              <div className="flex items-center gap-2">
+                <Home className="h-4 w-4 text-muted-foreground" />
+                <Link href={`/properties/${item.propertyId}`} className="font-medium hover:underline">
+                  {item.propertyName}
+                </Link>
               </div>
+              <div className="text-xs text-muted-foreground">{format(new Date(item.createdAt), "MMM d, yyyy")}</div>
+            </div>
 
-              <p className="text-sm mb-4">{item.text}</p>
+            <p className="text-sm mb-4">{item.text}</p>
 
-              {(item.images?.length || item.video || item.audio) && (
-                <Tabs defaultValue="images" className="mt-4">
-                  <TabsList className="grid grid-cols-3">
-                    <TabsTrigger value="images" disabled={!item.images?.length}>
-                      <ImageIcon className="h-4 w-4 mr-2" />
-                      Images
-                    </TabsTrigger>
-                    <TabsTrigger value="video" disabled={!item.video}>
-                      <Video className="h-4 w-4 mr-2" />
-                      Video
-                    </TabsTrigger>
-                    <TabsTrigger value="audio" disabled={!item.audio}>
-                      <Mic className="h-4 w-4 mr-2" />
-                      Audio
-                    </TabsTrigger>
-                  </TabsList>
+            {(item.images?.length || item.video || item.audio) && (
+              <Tabs defaultValue="images" className="mt-4">
+                <TabsList className="grid grid-cols-3">
+                  <TabsTrigger value="images" disabled={!item.images?.length}>
+                    <ImageIcon className="h-4 w-4 mr-2" />
+                    Images
+                  </TabsTrigger>
+                  <TabsTrigger value="video" disabled={!item.video}>
+                    <Video className="h-4 w-4 mr-2" />
+                    Video
+                  </TabsTrigger>
+                  <TabsTrigger value="audio" disabled={!item.audio}>
+                    <Mic className="h-4 w-4 mr-2" />
+                    Audio
+                  </TabsTrigger>
+                </TabsList>
 
-                  {item.images?.length && (
-                    <TabsContent value="images" className="mt-2">
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {item.images.map((image, index) => (
-                          <div key={index} className="aspect-square relative bg-muted rounded-md overflow-hidden">
-                            <Image
-                              src="/placeholder.svg?height=200&width=200"
-                              alt={`Feedback image ${index + 1}`}
-                              fill
-                              className="object-cover"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </TabsContent>
-                  )}
+                {item.images?.length && (
+                  <TabsContent value="images" className="mt-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {item.images.map((image, index) => (
+                        <div key={index} className="aspect-square relative bg-muted rounded-md overflow-hidden">
+                          <Image
+                            src="/placeholder.svg?height=200&width=200"
+                            alt={`Feedback image ${index + 1}`}
+                            fill
+                            className="object-cover"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </TabsContent>
+                )}
 
-                  {item.video && (
-                    <TabsContent value="video" className="mt-2">
-                      <div className="aspect-video bg-muted rounded-md overflow-hidden">
-                        <video src={item.video} controls className="w-full h-full" />
-                      </div>
-                    </TabsContent>
-                  )}
+                {item.video && (
+                  <TabsContent value="video" className="mt-2">
+                    <div className="aspect-video bg-muted rounded-md overflow-hidden">
+                      <video src={item.video} controls className="w-full h-full" />
+                    </div>
+                  </TabsContent>
+                )}
 
-                  {item.audio && (
-                    <TabsContent value="audio" className="mt-2">
-                      <div className="border rounded-md p-2">
-                        <audio src={item.audio} controls className="w-full" />
-                      </div>
-                    </TabsContent>
-                  )}
-                </Tabs>
-              )}
-              <div className="flex justify-end mt-2 pt-2 border-t">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setEditingFeedback(item)
-                    setIsEditDialogOpen(true)
-                  }}
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-destructive hover:text-destructive"
-                  onClick={() => {
-                    setDeletingFeedbackId(item.id)
-                    setIsDeleteDialogOpen(true)
-                  }}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))
-      ) : (
-        <div className="text-center py-12 border rounded-lg">
-          <MessageSquare className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium mb-2">No feedback yet</h3>
-          <p className="text-muted-foreground mb-4">Add feedback for one of your properties</p>
-          <Button asChild>
-            <Link href="/">Browse Properties</Link>
-          </Button>
-        </div>
-      )}
+                {item.audio && (
+                  <TabsContent value="audio" className="mt-2">
+                    <div className="border rounded-md p-2">
+                      <audio src={item.audio} controls className="w-full" />
+                    </div>
+                  </TabsContent>
+                )}
+              </Tabs>
+            )}
+            <div className="flex justify-end mt-2 pt-2 border-t">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setEditingFeedback(item)
+                  setIsEditDialogOpen(true)
+                }}
+              >
+                <Edit className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => {
+                  setDeletingFeedbackId(item.id)
+                  setIsDeleteDialogOpen(true)
+                }}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
       <EditFeedbackDialog
         feedback={editingFeedback}
         open={isEditDialogOpen}

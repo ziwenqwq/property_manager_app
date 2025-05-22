@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Image from "next/image"
 import { format } from "date-fns"
-import { MessageSquare, ImageIcon, Video, Mic, Edit, Trash2 } from "lucide-react"
+import { MessageSquare, ImageIcon, Video, Mic, Edit, Trash2, X } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -11,11 +11,13 @@ import { getFeedbackByPropertyId } from "@/lib/data"
 import type { Feedback } from "@/lib/types"
 import EditFeedbackDialog from "@/components/edit-feedback-dialog"
 import { Button } from "@/components/ui/button"
-import { deleteFeedback } from "@/lib/actions"
+import { deleteFeedback, deleteFile } from "@/lib/actions"
 import { toast } from "@/components/ui/use-toast"
 import ConfirmationDialog from "@/components/confirmation-dialog"
+import { useRouter } from "next/navigation"
 
 export default function PropertyFeedback({ propertyId }: { propertyId: string }) {
+  const router = useRouter()
   const [feedback, setFeedback] = useState<Feedback[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -24,6 +26,9 @@ export default function PropertyFeedback({ propertyId }: { propertyId: string })
   const [deletingFeedbackId, setDeletingFeedbackId] = useState<string | null>(null)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [deletingFileId, setDeletingFileId] = useState<string | null>(null)
+  const [isDeleteFileDialogOpen, setIsDeleteFileDialogOpen] = useState(false)
+  const [deletingFileType, setDeletingFileType] = useState<string>("")
 
   const refreshFeedback = () => {
     setRefreshTrigger((prev) => prev + 1)
@@ -82,7 +87,48 @@ export default function PropertyFeedback({ propertyId }: { propertyId: string })
       })
     } finally {
       setDeletingFeedbackId(null)
+      setIsDeleteDialogOpen(false)
     }
+  }
+
+  const handleDeleteFile = async () => {
+    if (!deletingFileId) return
+
+    try {
+      const result = await deleteFile(deletingFileId)
+
+      if (result.success) {
+        toast({
+          title: "File deleted",
+          description: `The ${deletingFileType} has been deleted successfully.`,
+        })
+        refreshFeedback()
+        router.refresh()
+      } else {
+        toast({
+          title: "Error deleting file",
+          description: result.error || "An unexpected error occurred",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error deleting file:", error)
+      toast({
+        title: "Error deleting file",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      })
+    } finally {
+      setDeletingFileId(null)
+      setDeletingFileType("")
+      setIsDeleteFileDialogOpen(false)
+    }
+  }
+
+  const confirmDeleteFile = (fileId: string, fileType: string) => {
+    setDeletingFileId(fileId)
+    setDeletingFileType(fileType)
+    setIsDeleteFileDialogOpen(true)
   }
 
   if (isLoading) {
@@ -153,13 +199,21 @@ export default function PropertyFeedback({ propertyId }: { propertyId: string })
                     <TabsContent value="images" className="mt-2">
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {item.images.map((image, index) => (
-                          <div key={index} className="aspect-square relative bg-muted rounded-md overflow-hidden">
+                          <div key={index} className="aspect-square relative bg-muted rounded-md overflow-hidden group">
                             <Image
                               src={image || "/placeholder.svg?height=200&width=200"}
                               alt={`Feedback image ${index + 1}`}
                               fill
                               className="object-cover"
                             />
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => confirmDeleteFile(`image-${item.id}-${index}`, "image")}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
                           </div>
                         ))}
                       </div>
@@ -168,16 +222,32 @@ export default function PropertyFeedback({ propertyId }: { propertyId: string })
 
                   {item.video && (
                     <TabsContent value="video" className="mt-2">
-                      <div className="aspect-video bg-muted rounded-md overflow-hidden">
+                      <div className="aspect-video bg-muted rounded-md overflow-hidden relative group">
                         <video src={item.video} controls className="w-full h-full" />
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-2 right-2 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => confirmDeleteFile(`video-${item.id}`, "video")}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
                     </TabsContent>
                   )}
 
                   {item.audio && (
                     <TabsContent value="audio" className="mt-2">
-                      <div className="border rounded-md p-2">
+                      <div className="border rounded-md p-2 relative group">
                         <audio src={item.audio} controls className="w-full" />
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-2 right-2 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => confirmDeleteFile(`audio-${item.id}`, "audio")}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
                     </TabsContent>
                   )}
@@ -224,6 +294,14 @@ export default function PropertyFeedback({ propertyId }: { propertyId: string })
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         onConfirm={handleDeleteFeedback}
+        variant="destructive"
+      />
+      <ConfirmationDialog
+        title={`Delete ${deletingFileType}`}
+        description={`Are you sure you want to delete this ${deletingFileType}? This action cannot be undone.`}
+        open={isDeleteFileDialogOpen}
+        onOpenChange={setIsDeleteFileDialogOpen}
+        onConfirm={handleDeleteFile}
         variant="destructive"
       />
     </div>

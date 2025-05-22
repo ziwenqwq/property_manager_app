@@ -19,6 +19,8 @@ import { useRouter } from "next/navigation"
 
 export default function AllBookings() {
   const [bookings, setBookings] = useState<Booking[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [deletingBookingId, setDeletingBookingId] = useState<string | null>(null)
@@ -26,14 +28,24 @@ export default function AllBookings() {
   const router = useRouter()
 
   useEffect(() => {
-    const fetchBookings = async () => {
+    async function fetchBookings() {
       try {
-        const bookingsData = await getAllBookings()
+        setLoading(true)
+        const result = await getAllBookings()
         // Ensure bookings is always an array
-        setBookings(Array.isArray(bookingsData) ? bookingsData : [])
-      } catch (error) {
-        console.error("Error fetching bookings:", error)
+        if (Array.isArray(result)) {
+          setBookings(result)
+        } else {
+          console.error("getAllBookings did not return an array:", result)
+          setBookings([])
+          setError("Failed to load bookings. Please try again later.")
+        }
+      } catch (err) {
+        console.error("Error fetching bookings:", err)
         setBookings([])
+        setError("An error occurred while loading bookings.")
+      } finally {
+        setLoading(false)
       }
     }
 
@@ -44,7 +56,17 @@ export default function AllBookings() {
     setIsEditDialogOpen(false)
     setEditingBooking(null)
     // Refresh the bookings list
-    setBookings(getAllBookings())
+    router.refresh()
+    // Also fetch bookings again to ensure we have the latest data
+    getAllBookings()
+      .then((result) => {
+        if (Array.isArray(result)) {
+          setBookings(result)
+        }
+      })
+      .catch((err) => {
+        console.error("Error refreshing bookings:", err)
+      })
   }
 
   const handleDeleteBooking = async () => {
@@ -59,8 +81,9 @@ export default function AllBookings() {
           description: "The viewing has been deleted successfully.",
         })
         // Refresh the bookings list
-        setBookings(getAllBookings())
         router.refresh()
+        // Also update the local state to remove the deleted booking
+        setBookings((prevBookings) => prevBookings.filter((booking) => booking.id !== deletingBookingId))
       } else {
         toast({
           title: "Error deleting viewing",
@@ -77,7 +100,30 @@ export default function AllBookings() {
       })
     } finally {
       setDeletingBookingId(null)
+      setIsDeleteDialogOpen(false)
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="text-center py-12">
+        <div className="animate-pulse">
+          <Calendar className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+          <h3 className="text-lg font-medium mb-2">Loading viewings...</h3>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12 border rounded-lg">
+        <Calendar className="mx-auto h-12 w-12 text-red-500 mb-4" />
+        <h3 className="text-lg font-medium mb-2">Error Loading Viewings</h3>
+        <p className="text-muted-foreground mb-4">{error}</p>
+        <Button onClick={() => router.refresh()}>Try Again</Button>
+      </div>
+    )
   }
 
   if (bookings.length === 0) {
@@ -95,81 +141,80 @@ export default function AllBookings() {
 
   return (
     <div className="grid gap-4">
-      {Array.isArray(bookings) &&
-        bookings.map((booking) => (
-          <Card key={booking.id}>
-            <CardContent className="p-4">
-              <div className="flex flex-col sm:flex-row justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Home className="h-4 w-4 text-muted-foreground" />
-                    <Link href={`/properties/${booking.propertyId}`} className="font-medium hover:underline">
-                      {booking.propertyName}
-                    </Link>
-                    {booking.status && (
-                      <Badge
-                        className={cn(
-                          "ml-2",
-                          booking.status === "completed" && "bg-green-500",
-                          booking.status === "scheduled" && "bg-blue-500",
-                          booking.status === "cancelled" && "bg-red-500",
-                        )}
-                      >
-                        {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex flex-row items-center gap-4 text-sm">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span>{format(new Date(booking.date), "MMMM d, yyyy")}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-muted-foreground" />
-                      <span>{booking.time}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  {booking.name && booking.name !== "Unspecified" && (
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium">Estate Agent: {booking.name}</span>
-                    </div>
+      {bookings.map((booking) => (
+        <Card key={booking.id}>
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Home className="h-4 w-4 text-muted-foreground" />
+                  <Link href={`/properties/${booking.propertyId}`} className="font-medium hover:underline">
+                    {booking.propertyName}
+                  </Link>
+                  {booking.status && (
+                    <Badge
+                      className={cn(
+                        "ml-2",
+                        booking.status === "completed" && "bg-green-500",
+                        booking.status === "scheduled" && "bg-blue-500",
+                        booking.status === "cancelled" && "bg-red-500",
+                      )}
+                    >
+                      {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                    </Badge>
                   )}
                 </div>
+                <div className="flex flex-row items-center gap-4 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span>{format(new Date(booking.date), "MMMM d, yyyy")}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <span>{booking.time}</span>
+                  </div>
+                </div>
               </div>
 
-              {booking.notes && <div className="mt-2 text-sm border-t pt-2">{booking.notes}</div>}
-              <div className="flex justify-end mt-2 pt-2 border-t">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setEditingBooking(booking)
-                    setIsEditDialogOpen(true)
-                  }}
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-destructive hover:text-destructive"
-                  onClick={() => {
-                    setDeletingBookingId(booking.id)
-                    setIsDeleteDialogOpen(true)
-                  }}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
-                </Button>
+              <div className="space-y-1">
+                {booking.name && booking.name !== "Unspecified" && (
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Estate Agent: {booking.name}</span>
+                  </div>
+                )}
               </div>
-            </CardContent>
-          </Card>
-        ))}
+            </div>
+
+            {booking.notes && <div className="mt-2 text-sm border-t pt-2">{booking.notes}</div>}
+            <div className="flex justify-end mt-2 pt-2 border-t">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setEditingBooking(booking)
+                  setIsEditDialogOpen(true)
+                }}
+              >
+                <Edit className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => {
+                  setDeletingBookingId(booking.id)
+                  setIsDeleteDialogOpen(true)
+                }}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
       <EditBookingDialog
         booking={editingBooking}
         open={isEditDialogOpen}

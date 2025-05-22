@@ -10,9 +10,8 @@ import {
   updateBooking,
   addFeedback,
   updateFeedback,
-  getPropertyById,
 } from "./data"
-import { uploadFile, STORAGE_BUCKETS, deleteFile as deleteStorageFile } from "./storage"
+import { uploadFile, STORAGE_BUCKETS } from "./storage"
 import type { Property, Booking, Feedback } from "./types"
 import { createServerClient } from "./supabase"
 
@@ -157,13 +156,19 @@ export async function createBooking(
     const time = formData.get("time") as string
     const notes = formData.get("notes") as string
 
+    // Validate required fields
+    if (!date || !time) {
+      return { success: false, error: "Date and time are required" }
+    }
+
     const booking = await addBooking({
       propertyId,
       date,
       time,
       name: estateAgent || "Unspecified",
-      email: "viewing@record.internal",
+      email: "viewing@record.internal", // Default email since it's not in the form
       notes: notes || undefined,
+      status: "scheduled", // Default status
     })
 
     if (!booking) {
@@ -372,15 +377,95 @@ export async function deleteFeedback(id: string): Promise<{ success: boolean; er
   }
 }
 
-// Delete file (feedback media)
+// Delete file (all file types including property files)
 export async function deleteFile(id: string): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = createServerClient()
 
+    // Check if the ID is a composite ID for images, videos, or audio in the PropertyFeedback component
+    if (id.startsWith("image-") || id.startsWith("video-") || id.startsWith("audio-")) {
+      const parts = id.split("-")
+      const mediaType = parts[0] // 'image', 'video', or 'audio'
+      const feedbackId = parts[1]
+      const index = parts[2] // Only for images
+
+      // Get the feedback to find the property ID
+      const { data: feedback, error: feedbackError } = await supabase
+        .from("feedback")
+        .select("property_id, text, images, video, audio")
+        .eq("id", feedbackId)
+        .single()
+
+      if (feedbackError) {
+        console.error(`Error fetching feedback ${feedbackId}:`, feedbackError)
+        return { success: false, error: feedbackError.message }
+      }
+
+      // Update the feedback based on the media type
+      const updateData: any = {}
+
+      if (mediaType === "image" && feedback.images) {
+        // Remove the image at the specified index
+        const images = Array.isArray(feedback.images) ? [...feedback.images] : []
+        if (images.length > Number(index)) {
+          images.splice(Number(index), 1)
+          updateData.images = images.length > 0 ? images : null
+        }
+      } else if (mediaType === "video") {
+        updateData.video = null
+      } else if (mediaType === "audio") {
+        updateData.audio = null
+      }
+
+      // Update the feedback
+      const { error: updateError } = await supabase.from("feedback").update(updateData).eq("id", feedbackId)
+
+      if (updateError) {
+        console.error(`Error updating feedback ${feedbackId}:`, updateError)
+        return { success: false, error: updateError.message }
+      }
+
+      // Revalidate paths
+      revalidatePath(`/properties/${feedback.property_id}`)
+      revalidatePath(`/feedback`)
+
+      return { success: true }
+    }
+
+    // Handle property file deletion (photos, floorplans, PDFs)
+    if (id.startsWith("photo-") || id.startsWith("floorplan-") || id.startsWith("listing-pdf")) {
+      // Extract property ID from the URL or use a different approach
+      // For now, we'll need to get the property ID from the current context
+      // Since we don't have direct access to propertyId here, we'll need to modify the approach
+
+      // Parse the file ID to determine the type and index
+      let fileType: string
+      let fileIndex: number | null = null
+      const propertyId: string | null = null
+
+      if (id.startsWith("photo-")) {
+        fileType = "photo"
+        fileIndex = Number.parseInt(id.split("-")[1])
+      } else if (id.startsWith("floorplan-")) {
+        fileType = "floorplan"
+        fileIndex = Number.parseInt(id.split("-")[1])
+      } else if (id.startsWith("listing-pdf")) {
+        fileType = "pdf"
+      } else {
+        return { success: false, error: "Invalid file ID format" }
+      }
+
+      // We need to find the property that contains this file
+      // This is a limitation of the current approach - we need the property ID
+      // For now, let's return an error asking for a different approach
+      return { success: false, error: "Property file deletion requires property context" }
+    }
+
+    // Regular file deletion from feedback_media table
     // Get the feedback ID and property ID before deleting for path revalidation
     const { data: media, error: fetchError } = await supabase
       .from("feedback_media")
-      .select("feedback_id, feedback(property_id), media_url")
+      .select("feedback_id, feedback(property_id)")
       .eq("id", id)
       .single()
 
@@ -389,24 +474,7 @@ export async function deleteFile(id: string): Promise<{ success: boolean; error?
       return { success: false, error: fetchError.message }
     }
 
-    // Delete the file from storage
-    if (media?.media_url) {
-      try {
-        // Extract the bucket and file path from the URL
-        const url = new URL(media.media_url)
-        const pathParts = url.pathname.split("/")
-        const bucket = pathParts[1] // The bucket name is usually the first part after the domain
-        const filePath = pathParts.slice(2).join("/") // The rest is the file path
-
-        // Delete from storage
-        await deleteStorageFile(bucket, filePath)
-      } catch (storageError) {
-        console.error(`Error deleting file from storage:`, storageError)
-        // Continue with database deletion even if storage deletion fails
-      }
-    }
-
-    // Delete the media record from the database
+    // Delete the media
     const { error } = await supabase.from("feedback_media").delete().eq("id", id)
 
     if (error) {
@@ -429,205 +497,90 @@ export async function deleteFile(id: string): Promise<{ success: boolean; error?
   }
 }
 
-// Helper function to extract file path from URL
-function extractFilePathFromUrl(url: string): { bucket: string; filePath: string } | null {
-  try {
-    // Parse the URL
-    const parsedUrl = new URL(url)
-
-    // Extract the path parts
-    const pathParts = parsedUrl.pathname.split("/")
-
-    // The bucket is typically the first part after the domain
-    // For example: https://qyqebpdepqrevtsbivjr.supabase.co/storage/v1/object/public/property-images/file.jpg
-    // The bucket would be "property-images"
-
-    // Find the index of "public" in the path
-    const publicIndex = pathParts.findIndex((part) => part === "public")
-
-    if (publicIndex !== -1 && publicIndex + 1 < pathParts.length) {
-      const bucket = pathParts[publicIndex + 1]
-      const filePath = pathParts.slice(publicIndex + 2).join("/")
-      return { bucket, filePath }
-    }
-
-    return null
-  } catch (error) {
-    console.error("Error extracting file path from URL:", error)
-    return null
-  }
-}
-
-// New actions for deleting property files
-
-// Delete property photo
-export async function deletePropertyPhoto(
+// New function specifically for property file deletion
+export async function deletePropertyFile(
   propertyId: string,
-  photoIndex: number,
+  fileId: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // Get the current property
-    const property = await getPropertyById(propertyId)
-    if (!property) {
-      return { success: false, error: "Property not found" }
+    const supabase = createServerClient()
+
+    // Get the current property data
+    const { data: property, error: propertyError } = await supabase
+      .from("properties")
+      .select("property_photos, floorplans, listing_pdf")
+      .eq("id", propertyId)
+      .single()
+
+    if (propertyError) {
+      console.error(`Error fetching property ${propertyId}:`, propertyError)
+      return { success: false, error: propertyError.message }
     }
 
-    // Get the current photos
-    const photos = property.photos || []
+    const updateData: any = {}
 
-    // Check if the index is valid
-    if (photoIndex < 0 || photoIndex >= photos.length) {
-      return { success: false, error: "Invalid photo index" }
-    }
+    // Handle different file types
+    if (fileId.startsWith("photo-")) {
+      const index = Number.parseInt(fileId.split("-")[1])
+      if (property.property_photos) {
+        let photos = []
+        try {
+          if (typeof property.property_photos === "string") {
+            photos = JSON.parse(property.property_photos)
+          } else if (Array.isArray(property.property_photos)) {
+            photos = [...property.property_photos]
+          }
 
-    // Get the photo URL to delete
-    const photoUrl = photos[photoIndex]
-
-    // Delete the file from storage
-    try {
-      const fileInfo = extractFilePathFromUrl(photoUrl)
-      if (fileInfo) {
-        await deleteStorageFile(fileInfo.bucket, fileInfo.filePath)
-        console.log(`Deleted photo from storage: ${fileInfo.bucket}/${fileInfo.filePath}`)
+          if (photos.length > index) {
+            photos.splice(index, 1)
+            updateData.property_photos = photos.length > 0 ? JSON.stringify(photos) : null
+          }
+        } catch (e) {
+          console.error("Error parsing property photos:", e)
+          return { success: false, error: "Error parsing property photos" }
+        }
       }
-    } catch (storageError) {
-      console.error(`Error deleting photo from storage:`, storageError)
-      // Continue with database update even if storage deletion fails
-    }
+    } else if (fileId.startsWith("floorplan-")) {
+      const index = Number.parseInt(fileId.split("-")[1])
+      if (property.floorplans) {
+        let floorplans = []
+        try {
+          if (typeof property.floorplans === "string") {
+            floorplans = JSON.parse(property.floorplans)
+          } else if (Array.isArray(property.floorplans)) {
+            floorplans = [...property.floorplans]
+          }
 
-    // Remove the photo at the specified index
-    const updatedPhotos = [...photos]
-    updatedPhotos.splice(photoIndex, 1)
+          if (floorplans.length > index) {
+            floorplans.splice(index, 1)
+            updateData.floorplans = floorplans.length > 0 ? JSON.stringify(floorplans) : null
+          }
+        } catch (e) {
+          console.error("Error parsing floorplans:", e)
+          return { success: false, error: "Error parsing floorplans" }
+        }
+      }
+    } else if (fileId.startsWith("listing-pdf")) {
+      updateData.listing_pdf = null
+    } else {
+      return { success: false, error: "Invalid file type" }
+    }
 
     // Update the property
-    const result = await editProperty(propertyId, { photos: updatedPhotos })
-    if (!result.success) {
-      return { success: false, error: result.error || "Failed to update property" }
-    }
-
-    // Force a hard refresh
-    revalidatePath(`/properties/${propertyId}`)
-
-    return { success: true }
-  } catch (error) {
-    console.error(`Error deleting property photo:`, error)
-    return { success: false, error: "An unexpected error occurred" }
-  }
-}
-
-// Delete property floorplan
-export async function deletePropertyFloorplan(
-  propertyId: string,
-  floorplanIndex: number,
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    // Get the current property
-    const property = await getPropertyById(propertyId)
-    if (!property) {
-      return { success: false, error: "Property not found" }
-    }
-
-    // Get the current floorplans
-    const floorplans = property.floorplans || []
-
-    // Check if the index is valid
-    if (floorplanIndex < 0 || floorplanIndex >= floorplans.length) {
-      return { success: false, error: "Invalid floorplan index" }
-    }
-
-    // Get the floorplan URL to delete
-    const floorplanUrl = floorplans[floorplanIndex]
-
-    // Delete the file from storage
-    try {
-      const fileInfo = extractFilePathFromUrl(floorplanUrl)
-      if (fileInfo) {
-        await deleteStorageFile(fileInfo.bucket, fileInfo.filePath)
-        console.log(`Deleted floorplan from storage: ${fileInfo.bucket}/${fileInfo.filePath}`)
-      }
-    } catch (storageError) {
-      console.error(`Error deleting floorplan from storage:`, storageError)
-      // Continue with database update even if storage deletion fails
-    }
-
-    // Remove the floorplan at the specified index
-    const updatedFloorplans = [...floorplans]
-    updatedFloorplans.splice(floorplanIndex, 1)
-
-    // Update the property in the database
-    const supabase = createServerClient()
-    const { error: updateError } = await supabase
-      .from("properties")
-      .update({
-        floorplans: updatedFloorplans.length > 0 ? JSON.stringify(updatedFloorplans) : null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", propertyId)
+    const { error: updateError } = await supabase.from("properties").update(updateData).eq("id", propertyId)
 
     if (updateError) {
-      console.error(`Error updating property floorplans in database:`, updateError)
+      console.error(`Error updating property ${propertyId}:`, updateError)
       return { success: false, error: updateError.message }
     }
 
-    // Force a hard refresh
+    // Revalidate paths
     revalidatePath(`/properties/${propertyId}`)
+    revalidatePath("/")
 
     return { success: true }
   } catch (error) {
-    console.error(`Error deleting property floorplan:`, error)
-    return { success: false, error: "An unexpected error occurred" }
-  }
-}
-
-// Delete property listing PDF
-export async function deletePropertyListingPdf(propertyId: string): Promise<{ success: boolean; error?: string }> {
-  try {
-    // Get the current property
-    const property = await getPropertyById(propertyId)
-    if (!property) {
-      return { success: false, error: "Property not found" }
-    }
-
-    // Get the listing PDF URL
-    const pdfUrl = property.listingPdf
-
-    if (!pdfUrl) {
-      return { success: false, error: "No listing PDF found" }
-    }
-
-    // Delete the file from storage
-    try {
-      const fileInfo = extractFilePathFromUrl(pdfUrl)
-      if (fileInfo) {
-        await deleteStorageFile(fileInfo.bucket, fileInfo.filePath)
-        console.log(`Deleted listing PDF from storage: ${fileInfo.bucket}/${fileInfo.filePath}`)
-      }
-    } catch (storageError) {
-      console.error(`Error deleting listing PDF from storage:`, storageError)
-      // Continue with database update even if storage deletion fails
-    }
-
-    // Update the property in the database
-    const supabase = createServerClient()
-    const { error: updateError } = await supabase
-      .from("properties")
-      .update({
-        listing_pdf: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", propertyId)
-
-    if (updateError) {
-      console.error(`Error updating property listing PDF in database:`, updateError)
-      return { success: false, error: updateError.message }
-    }
-
-    // Force a hard refresh
-    revalidatePath(`/properties/${propertyId}`)
-
-    return { success: true }
-  } catch (error) {
-    console.error(`Error deleting property listing PDF:`, error)
+    console.error(`Error deleting property file ${fileId}:`, error)
     return { success: false, error: "An unexpected error occurred" }
   }
 }

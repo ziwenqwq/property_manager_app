@@ -14,6 +14,11 @@ import { deleteBooking } from "@/lib/actions"
 import { toast } from "@/components/ui/use-toast"
 import ConfirmationDialog from "@/components/confirmation-dialog"
 
+function formatBookingStatus(status: string | undefined): string {
+  if (!status) return "Scheduled"
+  return status.charAt(0).toUpperCase() + status.slice(1)
+}
+
 export default function PropertyBookings({ propertyId }: { propertyId: string }) {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -145,7 +150,7 @@ export default function PropertyBookings({ propertyId }: { propertyId: string })
                       booking.status === "cancelled" && "bg-red-500",
                     )}
                   >
-                    {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                    {formatBookingStatus(booking.status)}
                   </Badge>
                 )}
               </div>
