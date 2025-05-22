@@ -26,7 +26,18 @@ export default function AllBookings() {
   const router = useRouter()
 
   useEffect(() => {
-    setBookings(getAllBookings())
+    const fetchBookings = async () => {
+      try {
+        const bookingsData = await getAllBookings()
+        // Ensure bookings is always an array
+        setBookings(Array.isArray(bookingsData) ? bookingsData : [])
+      } catch (error) {
+        console.error("Error fetching bookings:", error)
+        setBookings([])
+      }
+    }
+
+    fetchBookings()
   }, [])
 
   const handleEditComplete = () => {
@@ -84,80 +95,81 @@ export default function AllBookings() {
 
   return (
     <div className="grid gap-4">
-      {bookings.map((booking) => (
-        <Card key={booking.id}>
-          <CardContent className="p-4">
-            <div className="flex flex-col sm:flex-row justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <Home className="h-4 w-4 text-muted-foreground" />
-                  <Link href={`/properties/${booking.propertyId}`} className="font-medium hover:underline">
-                    {booking.propertyName}
-                  </Link>
-                  {booking.status && (
-                    <Badge
-                      className={cn(
-                        "ml-2",
-                        booking.status === "completed" && "bg-green-500",
-                        booking.status === "scheduled" && "bg-blue-500",
-                        booking.status === "cancelled" && "bg-red-500",
-                      )}
-                    >
-                      {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                    </Badge>
+      {Array.isArray(bookings) &&
+        bookings.map((booking) => (
+          <Card key={booking.id}>
+            <CardContent className="p-4">
+              <div className="flex flex-col sm:flex-row justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Home className="h-4 w-4 text-muted-foreground" />
+                    <Link href={`/properties/${booking.propertyId}`} className="font-medium hover:underline">
+                      {booking.propertyName}
+                    </Link>
+                    {booking.status && (
+                      <Badge
+                        className={cn(
+                          "ml-2",
+                          booking.status === "completed" && "bg-green-500",
+                          booking.status === "scheduled" && "bg-blue-500",
+                          booking.status === "cancelled" && "bg-red-500",
+                        )}
+                      >
+                        {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex flex-row items-center gap-4 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <span>{format(new Date(booking.date), "MMMM d, yyyy")}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span>{booking.time}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  {booking.name && booking.name !== "Unspecified" && (
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">Estate Agent: {booking.name}</span>
+                    </div>
                   )}
                 </div>
-                <div className="flex flex-row items-center gap-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span>{format(new Date(booking.date), "MMMM d, yyyy")}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span>{booking.time}</span>
-                  </div>
-                </div>
               </div>
 
-              <div className="space-y-1">
-                {booking.name && booking.name !== "Unspecified" && (
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">Estate Agent: {booking.name}</span>
-                  </div>
-                )}
+              {booking.notes && <div className="mt-2 text-sm border-t pt-2">{booking.notes}</div>}
+              <div className="flex justify-end mt-2 pt-2 border-t">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setEditingBooking(booking)
+                    setIsEditDialogOpen(true)
+                  }}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => {
+                    setDeletingBookingId(booking.id)
+                    setIsDeleteDialogOpen(true)
+                  }}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
               </div>
-            </div>
-
-            {booking.notes && <div className="mt-2 text-sm border-t pt-2">{booking.notes}</div>}
-            <div className="flex justify-end mt-2 pt-2 border-t">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setEditingBooking(booking)
-                  setIsEditDialogOpen(true)
-                }}
-              >
-                <Edit className="h-4 w-4 mr-2" />
-                Edit
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-                onClick={() => {
-                  setDeletingBookingId(booking.id)
-                  setIsDeleteDialogOpen(true)
-                }}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+            </CardContent>
+          </Card>
+        ))}
       <EditBookingDialog
         booking={editingBooking}
         open={isEditDialogOpen}
