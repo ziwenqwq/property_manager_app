@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import {
@@ -22,7 +23,6 @@ import { getProperties } from "@/lib/data"
 import type { Property } from "@/lib/types"
 import PropertyRating from "@/components/property-rating"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useState, useEffect } from "react"
 import { deleteProperty } from "@/lib/actions"
 import { toast } from "@/components/ui/use-toast"
 import ConfirmationDialog from "@/components/confirmation-dialog"
@@ -33,21 +33,21 @@ export default function PropertyList() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    async function fetchProperties() {
-      try {
-        setLoading(true)
-        setError(null)
-        const data = await getProperties()
-        setProperties(data)
-      } catch (err) {
-        console.error("Error fetching properties:", err)
-        setError("Failed to load properties")
-      } finally {
-        setLoading(false)
-      }
+  const fetchProperties = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const data = await getProperties()
+      setProperties(data)
+    } catch (err) {
+      console.error("Error fetching properties:", err)
+      setError("Failed to load properties. Please try again.")
+    } finally {
+      setLoading(false)
     }
+  }
 
+  useEffect(() => {
     fetchProperties()
   }, [])
 
@@ -61,7 +61,7 @@ export default function PropertyList() {
         <Home className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
         <h3 className="text-lg font-medium mb-2">Error loading properties</h3>
         <p className="text-muted-foreground mb-4">{error}</p>
-        <Button onClick={() => window.location.reload()}>Try Again</Button>
+        <Button onClick={fetchProperties}>Try Again</Button>
       </div>
     )
   }
