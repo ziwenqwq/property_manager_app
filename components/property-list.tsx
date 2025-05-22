@@ -22,14 +22,49 @@ import { getProperties } from "@/lib/data"
 import type { Property } from "@/lib/types"
 import PropertyRating from "@/components/property-rating"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { deleteProperty } from "@/lib/actions"
 import { toast } from "@/components/ui/use-toast"
 import ConfirmationDialog from "@/components/confirmation-dialog"
 import { useRouter } from "next/navigation"
 
-export default async function PropertyList() {
-  const properties = await getProperties()
+export default function PropertyList() {
+  const [properties, setProperties] = useState<Property[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function fetchProperties() {
+      try {
+        setLoading(true)
+        setError(null)
+        const data = await getProperties()
+        setProperties(data)
+      } catch (err) {
+        console.error("Error fetching properties:", err)
+        setError("Failed to load properties")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchProperties()
+  }, [])
+
+  if (loading) {
+    return <PropertyListSkeleton />
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12 border rounded-lg">
+        <Home className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+        <h3 className="text-lg font-medium mb-2">Error loading properties</h3>
+        <p className="text-muted-foreground mb-4">{error}</p>
+        <Button onClick={() => window.location.reload()}>Try Again</Button>
+      </div>
+    )
+  }
 
   if (properties.length === 0) {
     return (
@@ -47,13 +82,20 @@ export default async function PropertyList() {
   return (
     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
       {properties.map((property) => (
-        <PropertyCard key={property.id} property={property} />
+        <PropertyCard
+          key={property.id}
+          property={property}
+          onPropertyDeleted={() => {
+            // Refresh the properties list after deletion
+            setProperties((prev) => prev.filter((p) => p.id !== property.id))
+          }}
+        />
       ))}
     </div>
   )
 }
 
-function PropertyCard({ property }: { property: Property }) {
+function PropertyCard({ property, onPropertyDeleted }: { property: Property; onPropertyDeleted?: () => void }) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const router = useRouter()
 
@@ -66,6 +108,8 @@ function PropertyCard({ property }: { property: Property }) {
           title: "Property deleted",
           description: "The property has been deleted successfully.",
         })
+        // Call the callback to update the parent component
+        onPropertyDeleted?.()
         router.refresh()
       } else {
         toast({
