@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
-import { File, FileText, Trash2 } from "lucide-react"
+import { File, FileText, Trash2, Eye, Download } from "lucide-react"
 import { format } from "date-fns"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,6 +12,7 @@ import { deleteFile, deletePropertyFile } from "@/lib/actions"
 import { toast } from "@/components/ui/use-toast"
 import ConfirmationDialog from "@/components/confirmation-dialog"
 import { useRouter } from "next/navigation"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
 
 interface PropertyFile {
   id: string
@@ -32,6 +33,8 @@ export default function PropertyFiles({ propertyId }: { propertyId: string }) {
   const [deletingFileId, setDeletingFileId] = useState<string | null>(null)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [deletingFileType, setDeletingFileType] = useState<string>("")
+  const [previewFile, setPreviewFile] = useState<PropertyFile | null>(null)
+  const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false)
 
   useEffect(() => {
     async function fetchFiles() {
@@ -118,6 +121,80 @@ export default function PropertyFiles({ propertyId }: { propertyId: string }) {
     setIsDeleteDialogOpen(true)
   }
 
+  const handlePreviewFile = (file: PropertyFile) => {
+    // Skip preview for PDFs
+    if (file.type === "pdf") {
+      return
+    }
+
+    setPreviewFile(file)
+    setIsPreviewDialogOpen(true)
+  }
+
+  const handleDownloadFile = (file: PropertyFile) => {
+    try {
+      // For PDFs, we'll use a different approach to handle potential CORS issues
+      if (file.type === "pdf") {
+        // Create a fetch request to get the file as a blob
+        fetch(file.url)
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error("Network response was not ok")
+            }
+            return response.blob()
+          })
+          .then((blob) => {
+            // Create a blob URL for the PDF
+            const blobUrl = window.URL.createObjectURL(blob)
+
+            // Create a temporary anchor element to download the file
+            const a = document.createElement("a")
+            a.href = blobUrl
+            a.download = file.name || `document-${file.id}.pdf`
+            document.body.appendChild(a)
+            a.click()
+
+            // Clean up
+            document.body.removeChild(a)
+            window.URL.revokeObjectURL(blobUrl)
+
+            toast({
+              title: "Download started",
+              description: `Downloading ${file.name || "PDF document"}`,
+            })
+          })
+          .catch((error) => {
+            console.error("Error downloading PDF:", error)
+            toast({
+              title: "Download failed",
+              description: "There was an error downloading the PDF. Please try again.",
+              variant: "destructive",
+            })
+          })
+      } else {
+        // For non-PDFs, use the standard download approach
+        const a = document.createElement("a")
+        a.href = file.url
+        a.download = file.name || `file-${file.id}`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+
+        toast({
+          title: "Download started",
+          description: `Downloading ${file.name || "file"}`,
+        })
+      }
+    } catch (error) {
+      console.error("Error downloading file:", error)
+      toast({
+        title: "Download failed",
+        description: "There was an error downloading the file. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
+
   // Group files by category
   const propertyPhotos = files.filter((file) => file.category === "property_photo")
   const floorplans = files.filter((file) => file.category === "floorplan")
@@ -184,6 +261,8 @@ export default function PropertyFiles({ propertyId }: { propertyId: string }) {
                     key={file.id}
                     file={file}
                     onDeleteClick={() => confirmDeleteFile(file.id, file.type)}
+                    onPreviewClick={() => handlePreviewFile(file)}
+                    onDownloadClick={() => handleDownloadFile(file)}
                     canDelete={true} // Enable delete for all files
                   />
                 ))}
@@ -206,6 +285,8 @@ export default function PropertyFiles({ propertyId }: { propertyId: string }) {
                       key={file.id}
                       file={file}
                       onDeleteClick={() => confirmDeleteFile(file.id, file.type)}
+                      onPreviewClick={() => handlePreviewFile(file)}
+                      onDownloadClick={() => handleDownloadFile(file)}
                       canDelete={true} // Enable delete for property photos
                     />
                   ))}
@@ -229,6 +310,8 @@ export default function PropertyFiles({ propertyId }: { propertyId: string }) {
                       key={file.id}
                       file={file}
                       onDeleteClick={() => confirmDeleteFile(file.id, file.type)}
+                      onPreviewClick={() => handlePreviewFile(file)}
+                      onDownloadClick={() => handleDownloadFile(file)}
                       canDelete={true} // Enable delete for floorplans
                     />
                   ))}
@@ -252,6 +335,8 @@ export default function PropertyFiles({ propertyId }: { propertyId: string }) {
                       key={file.id}
                       file={file}
                       onDeleteClick={() => confirmDeleteFile(file.id, file.type)}
+                      onPreviewClick={() => handlePreviewFile(file)}
+                      onDownloadClick={() => handleDownloadFile(file)}
                       canDelete={true} // Enable delete for documents
                     />
                   ))}
@@ -275,6 +360,8 @@ export default function PropertyFiles({ propertyId }: { propertyId: string }) {
                       key={file.id}
                       file={file}
                       onDeleteClick={() => confirmDeleteFile(file.id, file.type)}
+                      onPreviewClick={() => handlePreviewFile(file)}
+                      onDownloadClick={() => handleDownloadFile(file)}
                       canDelete={true}
                     />
                   ))}
@@ -293,6 +380,38 @@ export default function PropertyFiles({ propertyId }: { propertyId: string }) {
         onConfirm={handleDeleteFile}
         variant="destructive"
       />
+
+      <Dialog open={isPreviewDialogOpen} onOpenChange={setIsPreviewDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle>{previewFile?.name}</DialogTitle>
+            <DialogClose className="absolute right-4 top-4" />
+          </DialogHeader>
+          <div className="mt-4 flex justify-center">
+            {previewFile?.type === "image" && (
+              <div className="relative max-w-full max-h-[70vh]">
+                <Image
+                  src={previewFile.url || "/placeholder.svg"}
+                  alt={previewFile.name}
+                  width={800}
+                  height={600}
+                  className="object-contain max-h-[70vh]"
+                />
+              </div>
+            )}
+            {previewFile?.type === "video" && (
+              <video src={previewFile.url} controls className="max-w-full max-h-[70vh]" />
+            )}
+            {previewFile?.type === "audio" && <audio src={previewFile.url} controls className="w-full" />}
+          </div>
+          <div className="mt-4 flex justify-center gap-4">
+            <Button onClick={() => handleDownloadFile(previewFile!)}>
+              <Download className="h-4 w-4 mr-2" />
+              Download
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -300,10 +419,12 @@ export default function PropertyFiles({ propertyId }: { propertyId: string }) {
 interface FileItemProps {
   file: PropertyFile
   onDeleteClick: () => void
+  onPreviewClick: () => void
+  onDownloadClick: () => void
   canDelete: boolean
 }
 
-function FileItem({ file, onDeleteClick, canDelete }: FileItemProps) {
+function FileItem({ file, onDeleteClick, onPreviewClick, onDownloadClick, canDelete }: FileItemProps) {
   const isImage = file.type === "image"
   const isPdf = file.type === "pdf"
   const isVideo = file.type === "video"
@@ -314,61 +435,165 @@ function FileItem({ file, onDeleteClick, canDelete }: FileItemProps) {
       {isImage && (
         <div className="aspect-square relative">
           <Image src={file.url || "/placeholder.svg"} alt={file.name} fill className="object-cover" />
-          {canDelete && (
+          <div className="absolute top-1 right-1 flex gap-1">
             <Button
-              variant="destructive"
+              variant="secondary"
               size="icon"
-              className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={onDeleteClick}
+              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={(e) => {
+                e.stopPropagation()
+                onPreviewClick()
+              }}
             >
-              <Trash2 className="h-3 w-3" />
+              <Eye className="h-3 w-3" />
             </Button>
-          )}
+            <Button
+              variant="secondary"
+              size="icon"
+              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={(e) => {
+                e.stopPropagation()
+                onDownloadClick()
+              }}
+            >
+              <Download className="h-3 w-3" />
+            </Button>
+            {canDelete && (
+              <Button
+                variant="destructive"
+                size="icon"
+                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDeleteClick()
+                }}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
         </div>
       )}
       {isPdf && (
-        <div className="aspect-square flex items-center justify-center bg-muted p-4 relative">
+        <div
+          className="aspect-square flex flex-col items-center justify-center bg-muted p-4 relative cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDownloadClick()
+          }}
+        >
           <FileText className="h-16 w-16 text-muted-foreground" />
-          {canDelete && (
+          <span className="mt-2 text-xs text-center">Click to download</span>
+          <div className="absolute top-1 right-1 flex gap-1">
             <Button
-              variant="destructive"
+              variant="secondary"
               size="icon"
-              className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={onDeleteClick}
+              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={(e) => {
+                e.stopPropagation()
+                onDownloadClick()
+              }}
             >
-              <Trash2 className="h-3 w-3" />
+              <Download className="h-3 w-3" />
             </Button>
-          )}
+            {canDelete && (
+              <Button
+                variant="destructive"
+                size="icon"
+                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDeleteClick()
+                }}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
         </div>
       )}
       {isVideo && (
         <div className="aspect-video relative">
           <video src={file.url} className="w-full h-full object-cover" />
-          {canDelete && (
+          <div className="absolute top-1 right-1 flex gap-1">
             <Button
-              variant="destructive"
+              variant="secondary"
               size="icon"
-              className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={onDeleteClick}
+              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={(e) => {
+                e.stopPropagation()
+                onPreviewClick()
+              }}
             >
-              <Trash2 className="h-3 w-3" />
+              <Eye className="h-3 w-3" />
             </Button>
-          )}
+            <Button
+              variant="secondary"
+              size="icon"
+              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={(e) => {
+                e.stopPropagation()
+                onDownloadClick()
+              }}
+            >
+              <Download className="h-3 w-3" />
+            </Button>
+            {canDelete && (
+              <Button
+                variant="destructive"
+                size="icon"
+                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDeleteClick()
+                }}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
         </div>
       )}
       {isAudio && (
         <div className="p-4 relative">
           <audio src={file.url} controls className="w-full" />
-          {canDelete && (
+          <div className="absolute top-1 right-1 flex gap-1">
             <Button
-              variant="destructive"
+              variant="secondary"
               size="icon"
-              className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={onDeleteClick}
+              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={(e) => {
+                e.stopPropagation()
+                onPreviewClick()
+              }}
             >
-              <Trash2 className="h-3 w-3" />
+              <Eye className="h-3 w-3" />
             </Button>
-          )}
+            <Button
+              variant="secondary"
+              size="icon"
+              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={(e) => {
+                e.stopPropagation()
+                onDownloadClick()
+              }}
+            >
+              <Download className="h-3 w-3" />
+            </Button>
+            {canDelete && (
+              <Button
+                variant="destructive"
+                size="icon"
+                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDeleteClick()
+                }}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
         </div>
       )}
       <div className="p-2 text-xs truncate border-t">{file.name}</div>
